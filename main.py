@@ -10,8 +10,8 @@ from normalized_env import NormalizedEnv
 from evaluator import Evaluator
 from ddpg import DDPG
 from util import *
-
-gym.undo_logger_setup()
+from BeamManagementEnv import BeamManagementEnv
+# gym.undo_logger_setup()
 
 def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_episode_length=None, debug=False):
 
@@ -72,6 +72,7 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             episode_steps = 0
             episode_reward = 0.
             episode += 1
+            
 
 def test(num_episodes, agent, env, evaluate, model_path, visualize=True, debug=False):
 
@@ -90,7 +91,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch on TORCS with Multi-modal')
 
     parser.add_argument('--mode', default='train', type=str, help='support option: train/test')
-    parser.add_argument('--env', default='Pendulum-v0', type=str, help='open-ai gym environment')
+    parser.add_argument('--env', default='beam', type=str, help='open-ai gym environment')
     parser.add_argument('--hidden1', default=400, type=int, help='hidden num of first fully connect layer')
     parser.add_argument('--hidden2', default=300, type=int, help='hidden num of second fully connect layer')
     parser.add_argument('--rate', default=0.001, type=float, help='learning rate')
@@ -122,7 +123,8 @@ if __name__ == "__main__":
     if args.resume == 'default':
         args.resume = 'output/{}-run0'.format(args.env)
 
-    env = NormalizedEnv(gym.make(args.env))
+    # env = NormalizedEnv(gym.make(args.env))
+    env = BeamManagementEnv()
 
     if args.seed > 0:
         np.random.seed(args.seed)
