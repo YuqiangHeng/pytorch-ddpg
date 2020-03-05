@@ -208,6 +208,7 @@ class BeamManagementEnv(gym.Env):
         self.current_state_single_frame = []
         self.ue_speed = ue_speed
         self.prev_info = {}
+        self.reward_log = {}
         self.seed()
         
     def get_trajectory(self):
@@ -260,6 +261,7 @@ class BeamManagementEnv(gym.Env):
                     segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
                 reward += segment_achievable_rate*(segment_end - segment_start)/total_segment_length  
         self.prev_info['agent_reward'] = reward
+        self.reward_log['agent'].append(reward)
 
         if self.enable_baseline:
             if len(h_idc_covered) == 1:
@@ -283,6 +285,7 @@ class BeamManagementEnv(gym.Env):
                     baseline_reward += baseline_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
             info['baseline_reward'] = baseline_reward
             self.prev_info['baseline_reward'] = baseline_reward
+            self.reward_log['baseline'].append(baseline_reward)
         
         if self.enable_genie:
             if len(h_idc_covered) == 1:
@@ -306,6 +309,7 @@ class BeamManagementEnv(gym.Env):
                     genie_reward += genie_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
             info['genie_reward'] = genie_reward
             self.prev_info['genie_reward'] = genie_reward
+            self.reward_log['genie'].append(genie_reward)
             
                      
         self.t += 1
@@ -357,6 +361,12 @@ class BeamManagementEnv(gym.Env):
         self.t = 0
         self.ue_speed = 5 
 #        self.n_current_UEs = 0
+        self.reward_log = {}
+        self.reward_log['agent'] = []
+        if self.enable_baseline:
+            self.reward_log['baseline'] = []
+        if self.enable_genie:
+            self.reward_log['genie'] = []
         self.traj = self.get_trajectory()
         self.traj_pos = self.ue_loc[self.traj]
         self.traj_edge_lengths = np.linalg.norm(np.diff(self.traj_pos, axis=0),axis=1)

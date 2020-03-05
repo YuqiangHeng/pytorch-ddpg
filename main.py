@@ -42,15 +42,15 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
         if step > args.warmup :
             agent.update_policy()
         
-        # [optional] evaluate
-        if evaluate is not None and validate_steps > 0 and step % validate_steps == 0:
-            policy = lambda x: agent.select_action(x, decay_epsilon=False)
-            validate_reward = evaluate(env, policy, debug=False, visualize=False)
-            if debug: prYellow('[Evaluate] Step_{:07d}: mean_reward:{}'.format(step, validate_reward))
+        # # [optional] evaluate
+        # if evaluate is not None and validate_steps > 0 and step % validate_steps == 0:
+        #     policy = lambda x: agent.select_action(x, decay_epsilon=False)
+        #     validate_reward = evaluate(env, policy, debug=False, visualize=False)
+        #     if debug: prYellow('[Evaluate] Step_{:07d}: mean_reward:{}'.format(step, validate_reward))
 
-        # [optional] save intermideate model
-        if step % int(num_iterations/3) == 0:
-            agent.save_model(output)
+        # # [optional] save intermideate model
+        # if step % int(num_iterations/3) == 0:
+        #     agent.save_model(output)
 
         # update 
         step += 1
@@ -59,7 +59,10 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
         observation = deepcopy(observation2)
 
         if done: # end of episode
-            if debug: prGreen('#{}: episode_reward:{} steps:{}'.format(episode,episode_reward,step))
+            # if debug: prGreen('#{}: mean_episode_reward:{} episode_reward:{} steps:{}'.format(episode,episode_reward/episode_steps,episode_reward,step))
+            
+            if debug:
+                print('#{}: agent:{} baseline:{} genie:{}'.format(episode,sum(env.reward_log['agent'])/episode_steps,sum(env.reward_log['baseline'])/episode_steps,sum(env.reward_log['genie'])/episode_steps))
 
             agent.memory.append(
                 observation,
@@ -100,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument('--discount', default=0.99, type=float, help='')
     parser.add_argument('--bsize', default=64, type=int, help='minibatch size')
     parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
-    parser.add_argument('--window_length', default=1, type=int, help='')
+    parser.add_argument('--window_length', default=10, type=int, help='')
     parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=0.2, type=float, help='noise sigma') 
@@ -109,7 +112,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
     parser.add_argument('--validate_steps', default=2000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
-    parser.add_argument('--debug', dest='debug', action='store_true')
+    parser.add_argument('--debug', default = 'True', dest='debug', action='store_true')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
     parser.add_argument('--train_iter', default=200000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
@@ -124,7 +127,7 @@ if __name__ == "__main__":
         args.resume = 'output/{}-run0'.format(args.env)
 
     # env = NormalizedEnv(gym.make(args.env))
-    env = BeamManagementEnv()
+    env = BeamManagementEnv(enable_baseline = True, enable_genie = True)
 
     if args.seed > 0:
         np.random.seed(args.seed)

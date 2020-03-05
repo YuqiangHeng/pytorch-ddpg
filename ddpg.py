@@ -29,12 +29,20 @@ class DDPG(object):
             'hidden2':args.hidden2, 
             'init_w':args.init_w
         }
-        self.actor = Actor(self.nb_states, self.nb_actions, **net_cfg)
-        self.actor_target = Actor(self.nb_states, self.nb_actions, **net_cfg)
+        # self.actor = Actor(self.nb_states, self.nb_actions, **net_cfg)
+        # self.actor_target = Actor(self.nb_states, self.nb_actions, **net_cfg)
+        # self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
+
+        # self.critic = Critic(self.nb_states, self.nb_actions, **net_cfg)
+        # self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
+        # self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
+        
+        self.actor = Actor(self.nb_states, self.nb_actions, args.window_length, **net_cfg)
+        self.actor_target = Actor(self.nb_states, self.nb_actions, args.window_length, **net_cfg)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
 
-        self.critic = Critic(self.nb_states, self.nb_actions, **net_cfg)
-        self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
+        self.critic = Critic(self.nb_states, self.nb_actions, args.window_length, **net_cfg)
+        self.critic_target = Critic(self.nb_states, self.nb_actions, args.window_length, **net_cfg)
         self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
 
         hard_update(self.actor_target, self.actor) # Make sure target is with the same weight
