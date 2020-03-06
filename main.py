@@ -10,7 +10,7 @@ from normalized_env import NormalizedEnv
 from evaluator import Evaluator
 from ddpg import DDPG
 from util import *
-from BeamManagementEnv import BeamManagementEnv
+from BeamManagementEnv import BeamManagementEnv, BeamManagementEnvMultiFrame
 # gym.undo_logger_setup()
 
 def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_episode_length=None, debug=False):
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument('--discount', default=0.99, type=float, help='')
     parser.add_argument('--bsize', default=64, type=int, help='minibatch size')
     parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
-    parser.add_argument('--window_length', default=10, type=int, help='')
+    parser.add_argument('--window_length', default=1, type=int, help='')
     parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=0.2, type=float, help='noise sigma') 
@@ -127,8 +127,11 @@ if __name__ == "__main__":
         args.resume = 'output/{}-run0'.format(args.env)
 
     # env = NormalizedEnv(gym.make(args.env))
-    env = BeamManagementEnv(enable_baseline = True, enable_genie = True)
-
+    # env = BeamManagementEnv(enable_baseline = True, enable_genie = True)
+    window_len = 5
+    
+    env = BeamManagementEnvMultiFrame(window_length = window_len, enable_baseline=True,enable_genie=True)
+    
     if args.seed > 0:
         np.random.seed(args.seed)
         env.seed(args.seed)
@@ -137,7 +140,7 @@ if __name__ == "__main__":
     nb_actions = env.action_space.shape[0]
 
 
-    agent = DDPG(nb_states, nb_actions, args)
+    agent = DDPG(nb_states, nb_actions, window_len, args)
     evaluate = Evaluator(args.validate_episodes, 
         args.validate_steps, args.output, max_episode_length=args.max_episode_length)
 

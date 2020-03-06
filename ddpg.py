@@ -15,7 +15,7 @@ from util import *
 criterion = nn.MSELoss()
 
 class DDPG(object):
-    def __init__(self, nb_states, nb_actions, args):
+    def __init__(self, nb_states, nb_actions, window_length, args):
         
         if args.seed > 0:
             self.seed(args.seed)
@@ -37,12 +37,12 @@ class DDPG(object):
         # self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
         # self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
         
-        self.actor = Actor(self.nb_states, self.nb_actions, args.window_length, **net_cfg)
-        self.actor_target = Actor(self.nb_states, self.nb_actions, args.window_length, **net_cfg)
+        self.actor = Actor(self.nb_states, self.nb_actions, window_length, **net_cfg)
+        self.actor_target = Actor(self.nb_states, self.nb_actions, window_length, **net_cfg)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
 
-        self.critic = Critic(self.nb_states, self.nb_actions, args.window_length, **net_cfg)
-        self.critic_target = Critic(self.nb_states, self.nb_actions, args.window_length, **net_cfg)
+        self.critic = Critic(self.nb_states, self.nb_actions, window_length, **net_cfg)
+        self.critic_target = Critic(self.nb_states, self.nb_actions, window_length, **net_cfg)
         self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
 
         hard_update(self.actor_target, self.actor) # Make sure target is with the same weight

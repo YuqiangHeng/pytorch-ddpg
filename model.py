@@ -78,19 +78,31 @@ def fanin_init(size, fanin=None):
 class Actor(nn.Module):
     def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, init_w=3e-3):
         super(Actor, self).__init__()
-        # self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=8,stride=1),
-        #                            nn.ReLU(),
-        #                            nn.MaxPool2d(kernel_size = 2, stride=2))
-        # self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=4,stride=1),
-        #                            nn.ReLU(),
-        #                            nn.MaxPool2d(kernal_size=2, stride=2))
+        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=8,stride=1),
+                                    nn.ReLU(),
+                                    nn.MaxPool2d(kernel_size = 2, stride=2))
+        self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=4,stride=1),
+                                    nn.ReLU(),
+                                    nn.MaxPool2d(kernal_size=2, stride=2))
+        n_size = self._get_conv_output((window_len,nb_states))
         self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(int(window_len*nb_states), hidden1)
-        self.fc2 = nn.Linear(hidden1, hidden2)
-        self.fc3 = nn.Linear(hidden2,nb_actions)
+        self.fc1 = nn.Linear(n_size, hidden1)
+        self.fc2 = nn.Linear(hidden1,nb_actions)
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
         self.init_weights(init_w)
+        
+    def _forward_features(self,x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        return x
+    
+    def _get_conv_output(self,shape):
+        batch_size = 1
+        dummy_input = Variable(torch.rand(batch_size, *shape))
+        output_feat = self._forward_features(dummy_input)
+        n_size = output_feat.data.view(batch_size,-1).size(1)
+        return n_size
     
     def init_weights(self, init_w):
         self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
@@ -98,12 +110,12 @@ class Actor(nn.Module):
         self.fc3.weight.data.uniform_(-init_w, init_w)
     
     def forward(self, x):
-        out = self.flatten(x)
+        out = self.conv1(x)
+        out = self.conv2(out)
+        out = self.flatten(out)
         out = self.fc1(out)
         out = self.relu(out)
         out = self.fc2(out)
-        out = self.relu(out)
-        out = self.fc3(out)
         out = self.tanh(out)
         return out
     
