@@ -23,8 +23,8 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
     while step < num_iterations:
         # reset if it is the start of episode
         if observation is None:
-            observatio, initial_beams = deepcopy(env.reset())
-            agent.reset(observatio, initial_beams)
+            observation = deepcopy(env.reset())
+            agent.reset(observation)
 
         # agent pick action ...
         if step <= args.warmup:
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     # env = NormalizedEnv(gym.make(args.env))
     # env = BeamManagementEnv(enable_baseline = True, enable_genie = True)
     window_len = 5
-    env = BeamManagementEnv(ue_speed = 20,enable_baseline=True,enable_genie=True)
+    env = BeamManagementEnv(ue_speed = 20,enable_baseline=True,enable_genie=True, combine_state=args.combine_state)
     # env = BeamManagementEnvMultiFrame(window_length = window_len, enable_baseline=True,enable_genie=True)
     
     if args.seed > 0:

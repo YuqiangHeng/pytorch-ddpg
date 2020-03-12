@@ -178,9 +178,11 @@ class BeamManagementEnv(gym.Env):
            num_beams_per_UE: int = 8,
            ue_speed = 5,
            enable_baseline = False,
-           enable_genie = False):
+           enable_genie = False,
+           combine_state = False):
         self.enable_baseline = enable_baseline
         self.enable_genie = enable_genie
+        self.combine_state = combine_state #flag for whether to include previous action in state representation: s(t)=[ob(t),a(t-1)]
         self.n_antenna = num_antennas
         self.oversampling_factor = oversampling_factor
         self.codebook_size = int(self.n_antenna*self.oversampling_factor)
@@ -341,7 +343,11 @@ class BeamManagementEnv(gym.Env):
             self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
             info['baseline_beams'] = self.baseline_beams
         
-        return beam_report, reward, episode_end, info
+        if self.combine_state:
+            observation = np.concatenate((beam_report,action),axis=0)
+        else:
+            observation = beam_report
+        return observation, reward, episode_end, info
     
     def render(self):
         print(self.prev_info)
@@ -405,7 +411,10 @@ class BeamManagementEnv(gym.Env):
         beam_report = np.zeros((self.codebook_size))
         beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
         self.current_state_single_frame = beam_report
-        return beam_report, initial_beams
+        if self.combine_state:
+            return np.concatenate((beam_report,initial_beams),axis=0)
+        else:
+            return beam_report
         
 class BeamManagementEnvMultiFrame(gym.Env):
     def __init__(self, window_length: int = 1,

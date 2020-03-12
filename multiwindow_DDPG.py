@@ -22,7 +22,7 @@ class multiwindow_DDPG(object):
 
         self.nb_states = nb_states
         self.nb_actions= nb_actions
-        self.combine_state = args.combine_state        
+#        self.combine_state = args.combine_state        
         # Create Actor and Critic Network
         net_cfg = {
             'combine_state':args.combine_state,
@@ -121,15 +121,17 @@ class multiwindow_DDPG(object):
         self.critic_target.cuda()
 
     def observe(self, r_t, ob_t1, done):
+#        if self.is_training:
+#            if self.combine_state:
+#                combined_s_t = np.concatenate((self.ob_t, self.a_t), axis=0)
+#                print(self.a_t)
+#                self.memory.append(combined_s_t, self.a_t, r_t, done)
+#            else:
+#                self.memory.append(self.ob_t, self.a_t, r_t, done)
+#            self.ob_t = ob_t1
         if self.is_training:
-            if self.combine_state:
-                combined_s_t = np.concatenate((self.ob_t, self.a_t), axis=0)
-                print(self.a_t)
-                self.memory.append(combined_s_t, self.a_t, r_t, done)
-            else:
-                self.memory.append(self.ob_t, self.a_t, r_t, done)
+            self.memory.append(self.ob_t, self.a_t, r_t, done)
             self.ob_t = ob_t1
-
     def random_action(self):
         action = np.random.uniform(-1.,1.,self.nb_actions)
         binary_action = np.zeros(self.nb_actions)
@@ -152,7 +154,8 @@ class multiwindow_DDPG(object):
  
     # a modified implementation of selection_action that enables window_length > 1
     def select_action(self, observation, decay_epsilon=True):
-        s_t = self.memory.get_recent_state(np.concatenate((observation, self.a_t),axis=0))
+#        s_t = self.memory.get_recent_state(np.concatenate((observation, self.a_t),axis=0))
+        s_t = self.memory.get_recent_state(observation)
         action = to_numpy(
             self.actor(to_tensor(np.array([s_t])))
         ).squeeze(0)
@@ -171,7 +174,7 @@ class multiwindow_DDPG(object):
     #     self.random_process.reset_states()
      
     # modified reset() function that also takes in initial beam config
-    def reset(self, obs, beams):
+    def reset(self, obs):
         self.ob_t = obs
         # self.a_t = beams
         self.random_process.reset_states()
