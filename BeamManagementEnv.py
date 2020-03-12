@@ -235,8 +235,9 @@ class BeamManagementEnv(gym.Env):
         return 30 + 10*np.log10(result)-(-94)
                 
     def step(self, action): #action is codebook_size x 1 mulit bineary vector indicting which beams are activated
-#        self.assigned_beams_per_UE = np.nonzero(action)[0]
-        self.assigned_beams_per_UE = np.argsort(action)[-self.num_beams_per_UE:]
+        assert(len(np.nonzero(action)[0])==self.num_beams_per_UE)
+        self.assigned_beams_per_UE = np.nonzero(action)[0]
+        # self.assigned_beams_per_UE = np.argsort(action)[-self.num_beams_per_UE:]
         info = {}
         #get reward
         ue_traveled_dist_next = (self.t+1)*self.ue_speed
@@ -393,6 +394,8 @@ class BeamManagementEnv(gym.Env):
         self.current_idc_in_traj = max(np.nonzero(self.traj_point_distances <= self.ue_traveled_distance)[0])
         self.current_h_idc = self.traj[self.current_idc_in_traj]
         self.assigned_beams_per_UE, assigned_bf_gains = self.get_initial_beam_assignment()
+        initial_beams = np.zeros((self.codebook_size))
+        initial_beams[self.assigned_beams_per_UE] = 1
         if self.enable_baseline:
             baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
             baseline_beamset = self.calc_baseline_beams(baseline_max_beam)
@@ -402,7 +405,7 @@ class BeamManagementEnv(gym.Env):
         beam_report = np.zeros((self.codebook_size))
         beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
         self.current_state_single_frame = beam_report
-        return beam_report
+        return beam_report, initial_beams
         
 class BeamManagementEnvMultiFrame(gym.Env):
     def __init__(self, window_length: int = 1,
