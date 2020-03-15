@@ -12,6 +12,7 @@ from ddpg import DDPG
 from multiwindow_DDPG import multiwindow_DDPG
 from util import *
 from BeamManagementEnv import BeamManagementEnv, BeamManagementEnvMultiFrame
+
 # gym.undo_logger_setup()
 
 def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_episode_length=None, debug=False):
@@ -64,13 +65,17 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             
             if debug:
                 print('#{:5d}: agent:{:07.4f} baseline:{:07.4f} genie:{:07.4f}'.format(episode,sum(env.reward_log['agent'])/episode_steps,sum(env.reward_log['baseline'])/episode_steps,sum(env.reward_log['genie'])/episode_steps))
-            temp_action = agent.select_action(observation)
+            # temp_action = agent.select_action(observation)
+            # agent.memory.append(
+            #     np.concatenate((observation, temp_action),axis=0),
+            #     temp_action,
+            #     0., False
+            # )
             agent.memory.append(
-                np.concatenate((observation, temp_action),axis=0),
-                temp_action,
+                observation,
+                agent.select_action(observation),
                 0., False
             )
-
             # reset
             observation = None
             episode_steps = 0
@@ -89,6 +94,7 @@ def test(num_episodes, agent, env, evaluate, model_path, visualize=True, debug=F
         validate_reward = evaluate(env, policy, debug=debug, visualize=visualize, save=False)
         if debug: prYellow('[Evaluate] #{}: mean_reward:{}'.format(i, validate_reward))
 
+import time
 
 if __name__ == "__main__":
 
@@ -113,15 +119,15 @@ if __name__ == "__main__":
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
     parser.add_argument('--validate_steps', default=2000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
-    parser.add_argument('--debug', default = 'True', dest='debug', action='store_true')
+    parser.add_argument('--debug', default = False, dest='debug', action='store_false')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=100000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=1000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
     parser.add_argument('--combine_state', default='True')
     # parser.add_argument('--l2norm', default=0.01, type=float, help='l2 weight decay') # TODO
-    # parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
+    parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
 
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)
@@ -146,10 +152,14 @@ if __name__ == "__main__":
     agent = multiwindow_DDPG(nb_states, nb_actions, window_len, args)
     evaluate = Evaluator(args.validate_episodes, 
         args.validate_steps, args.output, max_episode_length=args.max_episode_length)
-
+    
+    
     if args.mode == 'train':
+        tic = time.time()
         train(args.train_iter, agent, env, evaluate, 
             args.validate_steps, args.output, max_episode_length=args.max_episode_length, debug=args.debug)
+        toc = time.time()
+        print('Training time for {} steps = {} seconds'.format(args.train_iter, toc-tic))
 
     elif args.mode == 'test':
         test(args.validate_episodes, agent, env, evaluate, args.resume,

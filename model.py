@@ -76,7 +76,7 @@ def fanin_init(size, fanin=None):
     
 #Actor    
 class Actor(nn.Module):
-    def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, init_w=3e-3, combine_state = True):
+    def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, init_w=3e-3):
         super(Actor, self).__init__()
         # self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=3,stride=1),
         #                             nn.ReLU(),
@@ -90,16 +90,14 @@ class Actor(nn.Module):
         self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=2,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=32))
-        if combine_state:
-            n_size = self._get_conv_output((window_len,nb_states+nb_actions))
-        else:
-            n_size = self._get_conv_output((window_len,nb_states))
+
+        n_size = self._get_conv_output((window_len,nb_states))
         self.flatten = nn.Flatten()
         self.fc1 = nn.Linear(n_size, hidden1)
         self.fc2 = nn.Linear(hidden1,nb_actions)
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
-        self.init_weights(init_w)
+        # self.init_weights(init_w)
         
     def _forward_features(self,x):
         out = x.unsqueeze(0)
@@ -133,7 +131,7 @@ class Actor(nn.Module):
         return out
     
 class Critic(nn.Module):
-    def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, init_w=3e-3, combine_state = True):
+    def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, init_w=3e-3):
         super(Critic, self).__init__()
         self.flatten = nn.Flatten()
         self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=3,stride=1),
@@ -142,10 +140,8 @@ class Critic(nn.Module):
         self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=2,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=32))
-        if combine_state:
-            n_size = self._get_conv_output((window_len,nb_states+nb_actions))
-        else:
-            n_size = self._get_conv_output((window_len,nb_states))
+
+        n_size = self._get_conv_output((window_len,nb_states))
         self.fc_state_1 = nn.Linear(n_size, hidden1)
         self.fc_state_2 = nn.Linear(hidden1, hidden2)
         self.fc_action_1 = nn.Linear(nb_actions, hidden1)

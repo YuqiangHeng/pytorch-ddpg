@@ -188,7 +188,10 @@ class BeamManagementEnv(gym.Env):
         self.codebook_size = int(self.n_antenna*self.oversampling_factor)
         self.num_beams_per_UE = num_beams_per_UE
         self.action_space = spaces.MultiBinary(self.codebook_size)
-        self.observation_space = spaces.Box(low = np.full(self.codebook_size,-np.inf), high = np.full(self.codebook_size,np.inf), dtype=np.float32)
+        if self.combine_state:
+            self.observation_space = spaces.Box(low = np.full(int(2*self.codebook_size),-np.inf), high = np.full(int(2*self.codebook_size),np.inf), dtype=np.float32)
+        else:
+            self.observation_space = spaces.Box(low = np.full(self.codebook_size,-np.inf), high = np.full(self.codebook_size,np.inf), dtype=np.float32)
 #        self.observation_space = spaces.MultiDiscrete(np.inf*np.ones(self.codebook_size))
         self.true_state = np.zeros((self.codebook_size))
         

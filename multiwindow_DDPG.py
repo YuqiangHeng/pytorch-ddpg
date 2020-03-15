@@ -25,7 +25,6 @@ class multiwindow_DDPG(object):
 #        self.combine_state = args.combine_state        
         # Create Actor and Critic Network
         net_cfg = {
-            'combine_state':args.combine_state,
             'hidden1':args.hidden1, 
             'hidden2':args.hidden2, 
             'init_w':args.init_w
