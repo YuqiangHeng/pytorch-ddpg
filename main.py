@@ -110,7 +110,7 @@ if __name__ == "__main__":
     parser.add_argument('--discount', default=0.99, type=float, help='')
     parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
     parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
-    parser.add_argument('--window_length', default=5, type=int, help='')
+    parser.add_argument('--window_length', default=1, type=int, help='')
     parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=0.2, type=float, help='noise sigma') 

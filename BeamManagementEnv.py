@@ -179,10 +179,12 @@ class BeamManagementEnv(gym.Env):
            ue_speed = 5,
            enable_baseline = False,
            enable_genie = False,
-           combine_state = False):
+           combine_state = False,
+           num_measurements = 1):
         self.enable_baseline = enable_baseline
         self.enable_genie = enable_genie
         self.combine_state = combine_state #flag for whether to include previous action in state representation: s(t)=[ob(t),a(t-1)]
+        self.num_measurements = num_measurements #number of measurements per timestep: if 1, 1 measurements collected at the end of the period. otherwise sample in equal partitions
         self.n_antenna = num_antennas
         self.oversampling_factor = oversampling_factor
         self.codebook_size = int(self.n_antenna*self.oversampling_factor)
@@ -210,7 +212,7 @@ class BeamManagementEnv(gym.Env):
         self.traj = []
         self.current_UE_pos = 0
         self.assigned_beams_per_UE = []
-        self.current_state_single_frame = []
+        # self.current_state_single_frame = []
         self.ue_speed = ue_speed
         self.prev_info = {}
         self.reward_log = {}
@@ -403,21 +405,53 @@ class BeamManagementEnv(gym.Env):
         self.current_idc_in_traj = max(np.nonzero(self.traj_point_distances <= self.ue_traveled_distance)[0])
         self.current_h_idc = self.traj[self.current_idc_in_traj]
         self.assigned_beams_per_UE, assigned_bf_gains = self.get_initial_beam_assignment()
+                
         initial_beams = np.zeros((self.codebook_size))
         initial_beams[self.assigned_beams_per_UE] = 1
         if self.enable_baseline:
             baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
             baseline_beamset = self.calc_baseline_beams(baseline_max_beam)
             self.baseline_beams = baseline_beamset
+        
+        """
+        # if num_measuremets > 1, measure beams in between:
+        #     initial beamset is an action appplied at t=0, collect measurements from t=0 to 1
+        """
+        if self.num_measurements > 1:
+            beam_report = np.zeros((self.num_measurements, self.codebook_size))
+            for temp_t_idx, temp_t in np.enumerate(np.arange(self.t, self.t+1, 1/self.num_measurements)):
+                temp_traveld_distance = temp_t * self.ue_speed
+                temp_idc_in_traj = max(np.nonzero(self.traj_point_distances <= temp_traveld_distance)[0])
+                temp_current_h_idc = self.traj[temp_idc_in_traj]
+                temp_beam_measurements = self.measure_beams_single_UE(temp_current_h_idc,self.assigned_beams_per_UE)
+                beam_report[self.assigned_beams_per_UE] = temp_beam_measurements
+            if self.combine_state:
+                action_matrix = np.zeros((self.num_measurements,self.codebook_size))
+                action_matrix[:,self.assigned_beams_per_UE] = 1
+                observation = np.concatenate((beam_report,action_matrix),axis=1)
+            else:
+                observation = beam_report               
+        else:
+            beam_report = np.zeros((self.codebook_size))
+            beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
+            # self.current_state_single_frame = beam_report
+            if self.combine_state:
+                observation = np.concatenate((beam_report,initial_beams),axis=0)
+            else:
+                observation = beam_report
 
-#        self.current_h_per_UE = []
+        self.t += 1
+        self.ue_traveled_distance = self.t*self.ue_speed
+        self.current_idc_in_traj = max(np.nonzero(self.traj_point_distances < self.ue_traveled_distance)[0])
+        self.current_h_idc = self.traj[self.current_idc_in_traj]
+        assigned_bf_gains = self.measure_beams_single_UE(self.current_h_idc, self.assigned_beams_per_UE)
         beam_report = np.zeros((self.codebook_size))
         beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
-        self.current_state_single_frame = beam_report
-        if self.combine_state:
-            return np.concatenate((beam_report,initial_beams),axis=0)
-        else:
-            return beam_report
+        if self.enable_baseline:
+            baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
+            self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
+            info['baseline_beams'] = self.baseline_beams
+        return observation
         
 class BeamManagementEnvMultiFrame(gym.Env):
     def __init__(self, window_length: int = 1,
