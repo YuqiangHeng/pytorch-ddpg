@@ -126,6 +126,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
     parser.add_argument('--combine_state', default='True')
+    parser.add_argument('--num_measurements', default=5)
     # parser.add_argument('--l2norm', default=0.01, type=float, help='l2 weight decay') # TODO
     parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
 
@@ -137,7 +138,7 @@ if __name__ == "__main__":
     # env = NormalizedEnv(gym.make(args.env))
     # env = BeamManagementEnv(enable_baseline = True, enable_genie = True)
     window_len = 5
-    env = BeamManagementEnv(ue_speed = 20,enable_baseline=True,enable_genie=True, combine_state=args.combine_state)
+    env = BeamManagementEnv(ue_speed = 20,enable_baseline=True,enable_genie=True, combine_state=args.combine_state, num_measurements = args.num_measurements)
     # env = BeamManagementEnvMultiFrame(window_length = window_len, enable_baseline=True,enable_genie=True)
     
     if args.seed > 0:
@@ -149,7 +150,7 @@ if __name__ == "__main__":
 
 
     # agent = DDPG(nb_states, nb_actions, window_len, args)
-    agent = multiwindow_DDPG(nb_states, nb_actions, window_len, args)
+    agent = multiwindow_DDPG(nb_states, nb_actions, args.num_measurements, args)
     evaluate = Evaluator(args.validate_episodes, 
         args.validate_steps, args.output, max_episode_length=args.max_episode_length)
     
