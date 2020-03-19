@@ -15,7 +15,7 @@ from util import *
 criterion = nn.MSELoss()
 
 class multiwindow_DDPG(object):
-    def __init__(self, nb_states, nb_actions, window_length, args):
+    def __init__(self, nb_states, nb_actions, args):
         
         if args.seed > 0:
             self.seed(args.seed)
@@ -27,7 +27,8 @@ class multiwindow_DDPG(object):
         net_cfg = {
             'hidden1':args.hidden1, 
             'hidden2':args.hidden2, 
-            'init_w':args.init_w
+            'init_w':args.init_w,
+            'window_len':args.window_length * args.num_measurements
         }
         # self.actor = Actor(self.nb_states, self.nb_actions, **net_cfg)
         # self.actor_target = Actor(self.nb_states, self.nb_actions, **net_cfg)
@@ -37,12 +38,12 @@ class multiwindow_DDPG(object):
         # self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
         # self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
         
-        self.actor = Actor(self.nb_states, self.nb_actions, window_length, **net_cfg)
-        self.actor_target = Actor(self.nb_states, self.nb_actions, window_length, **net_cfg)
+        self.actor = Actor(self.nb_states, self.nb_actions, **net_cfg)
+        self.actor_target = Actor(self.nb_states, self.nb_actions, **net_cfg)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
 
-        self.critic = Critic(self.nb_states, self.nb_actions, window_length, **net_cfg)
-        self.critic_target = Critic(self.nb_states, self.nb_actions, window_length, **net_cfg)
+        self.critic = Critic(self.nb_states, self.nb_actions, **net_cfg)
+        self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
         self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
 
         hard_update(self.actor_target, self.actor) # Make sure target is with the same weight
@@ -155,9 +156,15 @@ class multiwindow_DDPG(object):
     def select_action(self, observation, decay_epsilon=True):
 #        s_t = self.memory.get_recent_state(np.concatenate((observation, self.a_t),axis=0))
         s_t = self.memory.get_recent_state(observation)
+        #remove existing empty dimension and add batch dimension 
+        s_t_array = np.array([np.squeeze(np.array(s_t))])
         action = to_numpy(
-            self.actor(to_tensor(np.array([s_t])))
+            self.actor(to_tensor(s_t_array))
         ).squeeze(0)
+        
+        # action = to_numpy(
+        #     self.actor(to_tensor(np.array([s_t])))
+        # ).squeeze(0)
         action += self.is_training*max(self.epsilon, 0)*self.random_process.sample()
         action = np.clip(action, -1., 1.)
 
