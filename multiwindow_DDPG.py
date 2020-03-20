@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.optim import Adam
 
 from model import (Actor, Critic)
-from memory import SequentialMemory
+from memory import SequentialMemory,BeamSpaceSequentialMemory
 from random_process import OrnsteinUhlenbeckProcess
 from util import *
 
@@ -50,7 +50,8 @@ class multiwindow_DDPG(object):
         hard_update(self.critic_target, self.critic)
         
         #Create replay buffer
-        self.memory = SequentialMemory(limit=args.rmsize, window_length=args.window_length)
+        # self.memory = SequentialMemory(limit=args.rmsize, window_length=args.window_length)
+        self.memory = BeamSpaceSequentialMemory(limit=args.rmsize, window_length=args.window_length, num_measurements=args.num_measurements)
         self.random_process = OrnsteinUhlenbeckProcess(size=nb_actions, theta=args.ou_theta, mu=args.ou_mu, sigma=args.ou_sigma)
 
         # Hyper-parameters

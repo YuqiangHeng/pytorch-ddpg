@@ -12,15 +12,22 @@ from ddpg import DDPG
 from multiwindow_DDPG import multiwindow_DDPG
 from util import *
 from BeamManagementEnv import BeamManagementEnv, BeamManagementEnvMultiFrame
+import matplotlib.pyplot as plt
 
 # gym.undo_logger_setup()
-
+def update_line(hl, x, y):
+    hl.set_xdata(np.append(hl.get_xdata(), x))
+    hl.set_ydata(np.append(hl.get_ydata(), y))
+    plt.draw()
+    
 def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_episode_length=None, debug=False):
 
     agent.is_training = True
     step = episode = episode_steps = 0
     episode_reward = 0.
     observation = None
+    hl, = plt.plot([], [])
+    
     while step < num_iterations:
         # reset if it is the start of episode
         if observation is None:
@@ -64,7 +71,24 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             # if debug: prGreen('#{}: mean_episode_reward:{} episode_reward:{} steps:{}'.format(episode,episode_reward/episode_steps,episode_reward,step))
             
             if debug:
-                print('#{:5d}: agent:{:07.4f} baseline:{:07.4f} genie:{:07.4f}'.format(episode,sum(env.reward_log['agent'])/episode_steps,sum(env.reward_log['baseline'])/episode_steps,sum(env.reward_log['genie'])/episode_steps))
+                episode_avg_agent_reward = sum(env.reward_log['agent'])/episode_steps
+                
+                if env.enable_baseline
+                    episode_avg_baseline_reward = sum(env.reward_log['baseline'])/episode_steps
+                if env.enable_genie:
+                    episode_avg_genie_reward = sum(env.reward_log['genie'])/episode_steps
+                
+                if env.enable_baseline and env.enable_genie
+                    print('#{:5d}: agent:{:07.4f} baseline:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward,episode_avg_genie_reward))
+                elif env.enable_baseline:
+                    print('#{:5d}: agent:{:07.4f} baseline:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward))
+                elif env.enable_genie:
+                    print('#{:5d}: agent:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_genie_reward))
+                else:
+                    print('#{:5d}: agent:{:07.4f}'.format(episode,episode_avg_agent_reward))
+                update_line(hl,episode,episode_avg_agent_reward)
+
+
             # temp_action = agent.select_action(observation)
             # agent.memory.append(
             #     np.concatenate((observation, temp_action),axis=0),
@@ -109,6 +133,7 @@ if __name__ == "__main__":
     parser.add_argument('--warmup', default=100, type=int, help='time without training but only filling the replay memory')
     parser.add_argument('--discount', default=0.99, type=float, help='')
     parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
+    # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--window_length', default=1, type=int, help='')
     parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
@@ -121,7 +146,7 @@ if __name__ == "__main__":
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--debug', default = True, dest='debug', action='store_true')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=1000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=100000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -137,7 +162,7 @@ if __name__ == "__main__":
 
     # env = NormalizedEnv(gym.make(args.env))
     # env = BeamManagementEnv(enable_baseline = True, enable_genie = True)
-    env = BeamManagementEnv(ue_speed = 20,enable_baseline=True,enable_genie=True, combine_state=args.combine_state, num_measurements = args.num_measurements)
+    env = BeamManagementEnv(ue_speed = 20,enable_baseline=False,enable_genie=False, combine_state=args.combine_state, num_measurements = args.num_measurements)
     # env = BeamManagementEnvMultiFrame(window_length = window_len, enable_baseline=True,enable_genie=True)
     
     if args.seed > 0:
