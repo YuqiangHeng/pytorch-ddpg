@@ -15,10 +15,6 @@ from BeamManagementEnv import BeamManagementEnv, BeamManagementEnvMultiFrame
 import matplotlib.pyplot as plt
 
 # gym.undo_logger_setup()
-def update_line(hl, x, y):
-    hl.set_xdata(np.append(hl.get_xdata(), x))
-    hl.set_ydata(np.append(hl.get_ydata(), y))
-    plt.draw()
     
 def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_episode_length=None, debug=False):
 
@@ -26,8 +22,7 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
     step = episode = episode_steps = 0
     episode_reward = 0.
     observation = None
-    hl, = plt.plot([], [])
-    
+
     while step < num_iterations:
         # reset if it is the start of episode
         if observation is None:
@@ -73,12 +68,12 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             if debug:
                 episode_avg_agent_reward = sum(env.reward_log['agent'])/episode_steps
                 
-                if env.enable_baseline
+                if env.enable_baseline:
                     episode_avg_baseline_reward = sum(env.reward_log['baseline'])/episode_steps
                 if env.enable_genie:
                     episode_avg_genie_reward = sum(env.reward_log['genie'])/episode_steps
                 
-                if env.enable_baseline and env.enable_genie
+                if env.enable_baseline and env.enable_genie:
                     print('#{:5d}: agent:{:07.4f} baseline:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward,episode_avg_genie_reward))
                 elif env.enable_baseline:
                     print('#{:5d}: agent:{:07.4f} baseline:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward))
@@ -86,7 +81,6 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
                     print('#{:5d}: agent:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_genie_reward))
                 else:
                     print('#{:5d}: agent:{:07.4f}'.format(episode,episode_avg_agent_reward))
-                update_line(hl,episode,episode_avg_agent_reward)
 
 
             # temp_action = agent.select_action(observation)
@@ -146,7 +140,7 @@ if __name__ == "__main__":
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--debug', default = True, dest='debug', action='store_true')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=100000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=200000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -154,6 +148,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_measurements', default=5,type=int)
     # parser.add_argument('--l2norm', default=0.01, type=float, help='l2 weight decay') # TODO
     parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
+    parser.add_argument('--num_beams_per_UE',default=1,type=int)
 
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)
@@ -162,7 +157,7 @@ if __name__ == "__main__":
 
     # env = NormalizedEnv(gym.make(args.env))
     # env = BeamManagementEnv(enable_baseline = True, enable_genie = True)
-    env = BeamManagementEnv(ue_speed = 20,enable_baseline=False,enable_genie=False, combine_state=args.combine_state, num_measurements = args.num_measurements)
+    env = BeamManagementEnv(num_beams_per_UE = args.num_beams_per_UE, ue_speed = 20,enable_baseline=False,enable_genie=False, combine_state=args.combine_state, num_measurements = args.num_measurements)
     # env = BeamManagementEnvMultiFrame(window_length = window_len, enable_baseline=True,enable_genie=True)
     
     if args.seed > 0:

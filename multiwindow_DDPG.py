@@ -22,6 +22,7 @@ class multiwindow_DDPG(object):
 
         self.nb_states = nb_states
         self.nb_actions= nb_actions
+        self.num_beams_per_UE = args.num_beams_per_UE
 #        self.combine_state = args.combine_state        
         # Create Actor and Critic Network
         net_cfg = {
@@ -136,7 +137,7 @@ class multiwindow_DDPG(object):
     def random_action(self):
         action = np.random.uniform(-1.,1.,self.nb_actions)
         binary_action = np.zeros(self.nb_actions)
-        binary_action[np.argsort(action)[-8:]]=1
+        binary_action[np.argsort(action)[-self.num_beams_per_UE:]]=1
         self.a_t = binary_action
         return binary_action
 
@@ -172,7 +173,7 @@ class multiwindow_DDPG(object):
         if decay_epsilon:
             self.epsilon -= self.depsilon
         binary_action = np.zeros(self.nb_actions)
-        binary_action[np.argsort(action)[-8:]] = 1
+        binary_action[np.argsort(action)[-self.num_beams_per_UE:]] = 1
         self.a_t = binary_action
         return binary_action
 
