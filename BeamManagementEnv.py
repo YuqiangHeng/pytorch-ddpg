@@ -374,18 +374,33 @@ class BeamManagementEnv(gym.Env):
     
     def calc_baseline_beams(self, baseline_max_beam):
         #calculate the moving spatial window beamset
-        if baseline_max_beam < 3:
+        if baseline_max_beam < self.num_beams_per_UE/2:
             baseline_beamset_start = 0
             baseline_beamset_end = baseline_beamset_start+self.num_beams_per_UE
-        elif baseline_max_beam > self.codebook_size-5:
+        elif baseline_max_beam > self.codebook_size-self.num_beams_per_UE/2:
             baseline_beamset_end = self.codebook_size
             baseline_beamset_start = baseline_beamset_end-self.num_beams_per_UE
         else:
-            baseline_beamset_start = baseline_max_beam-3
-            baseline_beamset_end = baseline_max_beam+5
-        baseline_beamset = np.arange(baseline_beamset_start,baseline_beamset_end)
+            baseline_beamset_start = baseline_max_beam-self.num_beams_per_UE/2
+            baseline_beamset_end = baseline_max_beam+self.num_beams_per_UE/2
+        baseline_beamset = np.ceil(np.arange(baseline_beamset_start,baseline_beamset_end)).astype(int)
         assert(len(baseline_beamset) == self.num_beams_per_UE)    
         return baseline_beamset
+    
+    # def calc_baseline_beams(self, baseline_max_beam):
+    #     #calculate the moving spatial window beamset
+    #     if baseline_max_beam < 3:
+    #         baseline_beamset_start = 0
+    #         baseline_beamset_end = baseline_beamset_start+self.num_beams_per_UE
+    #     elif baseline_max_beam > self.codebook_size-5:
+    #         baseline_beamset_end = self.codebook_size
+    #         baseline_beamset_start = baseline_beamset_end-self.num_beams_per_UE
+    #     else:
+    #         baseline_beamset_start = baseline_max_beam-3
+    #         baseline_beamset_end = baseline_max_beam+5
+    #     baseline_beamset = np.arange(baseline_beamset_start,baseline_beamset_end)
+    #     assert(len(baseline_beamset) == self.num_beams_per_UE)    
+    #     return baseline_beamset
     
     def reset(self):
         # self.ue_speed = 5 

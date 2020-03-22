@@ -17,7 +17,12 @@ import matplotlib.pyplot as plt
 # gym.undo_logger_setup()
     
 def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_episode_length=None, debug=False):
-
+    
+    agent_rewards = []
+    if env.enable_baseline:
+        baseline_rewards = []
+    if env.enable_genie:
+        genie_rewards = []
     agent.is_training = True
     step = episode = episode_steps = 0
     episode_reward = 0.
@@ -67,11 +72,13 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             
             if debug:
                 episode_avg_agent_reward = sum(env.reward_log['agent'])/episode_steps
-                
+                agent_rewards.append(episode_avg_agent_reward)
                 if env.enable_baseline:
                     episode_avg_baseline_reward = sum(env.reward_log['baseline'])/episode_steps
+                    baseline_rewards.append(episode_avg_baseline_reward)
                 if env.enable_genie:
                     episode_avg_genie_reward = sum(env.reward_log['genie'])/episode_steps
+                    genie_rewards.append(episode_avg_genie_reward)
                 
                 if env.enable_baseline and env.enable_genie:
                     print('#{:5d}: agent:{:07.4f} baseline:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward,episode_avg_genie_reward))
@@ -99,7 +106,14 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             episode_steps = 0
             episode_reward = 0.
             episode += 1
-            
+    if env.enable_baseline and env.enable_genie:
+        return [agent_rewards, baseline_rewards, genie_rewards]
+    elif env.enable_baseline:
+        return [agent_rewards, baseline_rewards]
+    elif env.enable_genie:
+        return [agent_rewards, genie_rewards]
+    else:
+        return agent_rewards
 
 def test(num_episodes, agent, env, evaluate, model_path, visualize=True, debug=False):
 
@@ -113,6 +127,7 @@ def test(num_episodes, agent, env, evaluate, model_path, visualize=True, debug=F
         if debug: prYellow('[Evaluate] #{}: mean_reward:{}'.format(i, validate_reward))
 
 import time
+import seaborn as sns
 
 if __name__ == "__main__":
 
@@ -140,7 +155,7 @@ if __name__ == "__main__":
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--debug', default = True, dest='debug', action='store_true')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=200000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=2000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -149,6 +164,9 @@ if __name__ == "__main__":
     # parser.add_argument('--l2norm', default=0.01, type=float, help='l2 weight decay') # TODO
     parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
     parser.add_argument('--num_beams_per_UE',default=1,type=int)
+    parser.add_argument('--enable_baseline',default=True)
+    parser.add_argument('--enable_genie',default=True)
+    parser.add_argument('--ue_speed',default=20)
 
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)
@@ -157,7 +175,11 @@ if __name__ == "__main__":
 
     # env = NormalizedEnv(gym.make(args.env))
     # env = BeamManagementEnv(enable_baseline = True, enable_genie = True)
-    env = BeamManagementEnv(num_beams_per_UE = args.num_beams_per_UE, ue_speed = 20,enable_baseline=False,enable_genie=False, combine_state=args.combine_state, num_measurements = args.num_measurements)
+    env = BeamManagementEnv(num_beams_per_UE = args.num_beams_per_UE, ue_speed = args.ue_speed, 
+                            enable_baseline=args.enable_baseline, 
+                            enable_genie=args.enable_genie,
+                            combine_state=args.combine_state,
+                            num_measurements = args.num_measurements)
     # env = BeamManagementEnvMultiFrame(window_length = window_len, enable_baseline=True,enable_genie=True)
     
     if args.seed > 0:
@@ -176,10 +198,15 @@ if __name__ == "__main__":
     
     if args.mode == 'train':
         tic = time.time()
-        train(args.train_iter, agent, env, evaluate, 
+        rewards = train(args.train_iter, agent, env, evaluate, 
             args.validate_steps, args.output, max_episode_length=args.max_episode_length, debug=args.debug)
         toc = time.time()
         print('Training time for {} steps = {} seconds'.format(args.train_iter, toc-tic))
+        if args.enable_baseline and args.enable_genie:
+            sns.kdeplot(rewards[0],label='agent')
+            sns.kdeplot(rewards[1],label='baseline')
+            sns.kdeplot(rewards[2],label='genie')
+            plt.legend();
 
     elif args.mode == 'test':
         test(args.validate_episodes, agent, env, evaluate, args.resume,
