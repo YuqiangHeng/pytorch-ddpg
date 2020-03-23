@@ -217,6 +217,7 @@ class BeamManagementEnv(gym.Env):
         self.prev_info = {}
         self.reward_log = {}
         self.seed()
+        
 
     def get_trajectory(self):
         while True:

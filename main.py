@@ -69,16 +69,16 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
 
         if done: # end of episode
             # if debug: prGreen('#{}: mean_episode_reward:{} episode_reward:{} steps:{}'.format(episode,episode_reward/episode_steps,episode_reward,step))
-            
+            episode_avg_agent_reward = sum(env.reward_log['agent'])/episode_steps
+            agent_rewards.append(episode_avg_agent_reward)
+            if env.enable_baseline:
+                episode_avg_baseline_reward = sum(env.reward_log['baseline'])/episode_steps
+                baseline_rewards.append(episode_avg_baseline_reward)
+            if env.enable_genie:
+                episode_avg_genie_reward = sum(env.reward_log['genie'])/episode_steps
+                genie_rewards.append(episode_avg_genie_reward)            
+        
             if debug:
-                episode_avg_agent_reward = sum(env.reward_log['agent'])/episode_steps
-                agent_rewards.append(episode_avg_agent_reward)
-                if env.enable_baseline:
-                    episode_avg_baseline_reward = sum(env.reward_log['baseline'])/episode_steps
-                    baseline_rewards.append(episode_avg_baseline_reward)
-                if env.enable_genie:
-                    episode_avg_genie_reward = sum(env.reward_log['genie'])/episode_steps
-                    genie_rewards.append(episode_avg_genie_reward)
                 
                 if env.enable_baseline and env.enable_genie:
                     print('#{:5d}: agent:{:07.4f} baseline:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward,episode_avg_genie_reward))
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
-    parser.add_argument('--window_length', default=1, type=int, help='')
+    parser.add_argument('--window_length', default=5, type=int, help='')
     parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=0.2, type=float, help='noise sigma') 
@@ -153,9 +153,9 @@ if __name__ == "__main__":
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
     parser.add_argument('--validate_steps', default=2000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
-    parser.add_argument('--debug', default = True, dest='debug', action='store_true')
+    parser.add_argument('--debug', default = False, dest='debug')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=2000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=100000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -207,6 +207,19 @@ if __name__ == "__main__":
             sns.kdeplot(rewards[1],label='baseline')
             sns.kdeplot(rewards[2],label='genie')
             plt.legend();
+        elif args.enable_baseline:
+            sns.kdeplot(rewards[0],label='agent')
+            sns.kdeplot(rewards[1],label='baseline')
+            plt.legend();
+        elif args.enable_genie:
+            sns.kdeplot(rewards[0],label='agent')
+            sns.kdeplot(rewards[2],label='genie')
+            plt.legend();
+        else:
+            sns.kdeplot(rewards[0],label='agent')
+            plt.legend();
+            
+                    
 
     elif args.mode == 'test':
         test(args.validate_episodes, agent, env, evaluate, args.resume,

@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ipdb import set_trace as debug
+# from ipdb import set_trace as debug
 
 """
 Utility function for computing output of convolutions
@@ -84,10 +84,10 @@ class Actor(nn.Module):
         # self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=3,stride=1),
         #                             nn.ReLU(),
         #                             nn.MaxPool2d(kernel_size=2, stride=2))
-        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=3,stride=1),
+        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=10,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=16))
-        self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=2,stride=1),
+        self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=5,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=32))
 
@@ -134,10 +134,10 @@ class Critic(nn.Module):
     def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, init_w=3e-3):
         super(Critic, self).__init__()
         self.flatten = nn.Flatten()
-        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=3,stride=1),
+        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=10,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=16))
-        self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=2,stride=1),
+        self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=5,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=32))
 
