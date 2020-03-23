@@ -29,7 +29,9 @@ class multiwindow_DDPG(object):
             'hidden1':args.hidden1, 
             'hidden2':args.hidden2, 
             'init_w':args.init_w,
-            'window_len':args.window_length * args.num_measurements
+            'window_len':args.window_length * args.num_measurements,
+            'kernel_size_1':args.conv2d_1_kernel_size,
+            'kernel_size_2':args.conv2d_2_kernel_size
         }
         # self.actor = Actor(self.nb_states, self.nb_actions, **net_cfg)
         # self.actor_target = Actor(self.nb_states, self.nb_actions, **net_cfg)

@@ -144,7 +144,7 @@ if __name__ == "__main__":
     parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
-    parser.add_argument('--window_length', default=5, type=int, help='')
+    parser.add_argument('--window_length', default=1, type=int, help='')
     parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=0.2, type=float, help='noise sigma') 
@@ -153,20 +153,23 @@ if __name__ == "__main__":
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
     parser.add_argument('--validate_steps', default=2000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
-    parser.add_argument('--debug', default = False, dest='debug')
+    parser.add_argument('--debug', default = True, dest='debug')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
     parser.add_argument('--train_iter', default=100000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
-    parser.add_argument('--combine_state', default='True')
+    parser.add_argument('--combine_state', default= False)
     parser.add_argument('--num_measurements', default=5,type=int)
     # parser.add_argument('--l2norm', default=0.01, type=float, help='l2 weight decay') # TODO
-    parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
+    # parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
     parser.add_argument('--num_beams_per_UE',default=1,type=int)
-    parser.add_argument('--enable_baseline',default=True)
-    parser.add_argument('--enable_genie',default=True)
+    parser.add_argument('--enable_baseline',default=False)
+    parser.add_argument('--enable_genie',default=False)
     parser.add_argument('--ue_speed',default=20)
+    parser.add_argument('--full_observation', default=True)
+    parser.add_argument('--conv2d_1_kernel_size',type=int,default=3)
+    parser.add_argument('--conv2d_2_kernel_size',type=int,default=3)
 
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)
@@ -179,6 +182,7 @@ if __name__ == "__main__":
                             enable_baseline=args.enable_baseline, 
                             enable_genie=args.enable_genie,
                             combine_state=args.combine_state,
+                            full_observation = args.full_observation,
                             num_measurements = args.num_measurements)
     # env = BeamManagementEnvMultiFrame(window_length = window_len, enable_baseline=True,enable_genie=True)
     

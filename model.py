@@ -76,7 +76,7 @@ def fanin_init(size, fanin=None):
     
 #Actor    
 class Actor(nn.Module):
-    def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, init_w=3e-3):
+    def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, kernel_size_1=3,kernel_size_2 = 3, init_w=3e-3):
         super(Actor, self).__init__()
         # self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=3,stride=1),
         #                             nn.ReLU(),
@@ -84,10 +84,10 @@ class Actor(nn.Module):
         # self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=3,stride=1),
         #                             nn.ReLU(),
         #                             nn.MaxPool2d(kernel_size=2, stride=2))
-        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=10,stride=1),
+        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=kernel_size_1,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=16))
-        self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=5,stride=1),
+        self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=kernel_size_2,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=32))
 
@@ -131,13 +131,13 @@ class Actor(nn.Module):
         return out
     
 class Critic(nn.Module):
-    def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, init_w=3e-3):
+    def __init__(self, nb_states, nb_actions, window_len, hidden1=400, hidden2=300, kernel_size_1=3,kernel_size_2 = 3, init_w=3e-3):
         super(Critic, self).__init__()
         self.flatten = nn.Flatten()
-        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=10,stride=1),
+        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=kernel_size_1,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=16))
-        self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=5,stride=1),
+        self.conv2 = nn.Sequential(nn.Conv2d(16,32,kernel_size=kernel_size_2,stride=1),
                                     nn.ReLU(),
                                     nn.BatchNorm2d(num_features=32))
 

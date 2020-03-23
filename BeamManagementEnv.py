@@ -180,10 +180,12 @@ class BeamManagementEnv(gym.Env):
            enable_baseline = False,
            enable_genie = False,
            combine_state = False,
+           full_observation = False,
            num_measurements = 1):
         self.enable_baseline = enable_baseline
         self.enable_genie = enable_genie
         self.combine_state = combine_state #flag for whether to include previous action in state representation: s(t)=[ob(t),a(t-1)]
+        self.full_observation = full_observation # flag for whether to measure all beams in observation
         self.num_measurements = num_measurements #number of measurements per timestep: if 1, 1 measurements collected at the end of the period. otherwise sample in equal partitions
         self.n_antenna = num_antennas
         self.oversampling_factor = oversampling_factor
@@ -352,8 +354,10 @@ class BeamManagementEnv(gym.Env):
         #     observation = np.concatenate((beam_report,action),axis=0)
         # else:
         #     observation = beam_report
-            
-        observation = self._get_observation()
+        if self.full_observation:
+            observation = self._get_full_observation()
+        else:
+            observation = self._get_observation()
         
         return observation, reward, episode_end, info
     
@@ -461,7 +465,11 @@ class BeamManagementEnv(gym.Env):
         #         observation = np.concatenate((beam_report,initial_beams),axis=0)
         #     else:
         #         observation = beam_report
-        observation = self._get_observation()
+        
+        if self.full_observation:
+            observation = self._get_full_observation()
+        else:
+            observation = self._get_observation()
 
         self._time_increment()
         # prev_h_idc_in_traj = min(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])-1
@@ -516,6 +524,42 @@ class BeamManagementEnv(gym.Env):
             else:
                 observation = beam_report      
         return observation
+
+    def _get_full_observation(self):
+        """
+        # if num_measuremets > 1, measure beams in between:
+        #     initial beamset is an action appplied at t=0, collect measurements from t=0 to 1
+        # otherwise, measure beams at the last traj point before t=1
+        """
+        if self.num_measurements > 1:
+            beam_report = np.zeros((self.num_measurements, self.codebook_size))
+            for temp_t_idx, temp_t in enumerate(np.arange(self.t, self.t+1, 1/self.num_measurements)):
+                temp_traveld_distance = temp_t * self.ue_speed
+                temp_idc_in_traj = max(np.nonzero(self.traj_point_distances <= temp_traveld_distance)[0])
+                temp_current_h_idc = self.traj[temp_idc_in_traj]
+                temp_beam_measurements = self.measure_beams_single_UE(temp_current_h_idc,np.arange(self.codebook_size))
+                beam_report[temp_t_idx, :] = temp_beam_measurements
+            if self.combine_state:
+                action_matrix = np.zeros((self.num_measurements,self.codebook_size))
+                action_matrix[:,self.assigned_beams_per_UE] = 1
+                observation = np.concatenate((beam_report,action_matrix),axis=1)
+            else:
+                observation = beam_report               
+        else:
+            beam_report = np.zeros((self.codebook_size))
+            next_ue_traveled_distance = (self.t+1)*self.ue_speed
+            last_idc_in_traj_in_segment = max(np.nonzero(self.traj_point_distances < next_ue_traveled_distance)[0])
+            last_h_idc_global_in_segment = self.traj[last_idc_in_traj_in_segment]
+            beam_report[self.assigned_beams_per_UE] = self.measure_beams_single_UE(last_h_idc_global_in_segment, np.arange(self.codebook_size))
+            # self.current_state_single_frame = beam_report
+            if self.combine_state:
+                binary_action_vector = np.zeros((self.codebook_size))
+                binary_action_vector[self.assigned_beams_per_UE] = 1
+                observation = np.concatenate((beam_report,binary_action_vector),axis=0)
+            else:
+                observation = beam_report      
+        return observation
+
         
 class BeamManagementEnvMultiFrame(gym.Env):
     def __init__(self, window_length: int = 1,
