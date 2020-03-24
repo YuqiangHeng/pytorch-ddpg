@@ -171,7 +171,6 @@ def DFT_codebook(oversampling_factor):
         codebook_all[i,:] = np.exp(arr_response_vec)/np.sqrt(n_antenna)
     return codebook_all, bfdirections
 
-    
 class BeamManagementEnv(gym.Env):
     def __init__(self, oversampling_factor: int = 1,
              num_antennas : int = 64,
@@ -199,7 +198,8 @@ class BeamManagementEnv(gym.Env):
 #        self.observation_space = spaces.MultiDiscrete(np.inf*np.ones(self.codebook_size))
         self.true_state = np.zeros((self.codebook_size))
         
-        self.h = np.load(h_real_fname) + 1j*np.load(h_imag_fname)
+        # self.h = np.load(h_real_fname) + 1j*np.load(h_imag_fname)
+        self._load_channels()
         self.ue_loc = np.load(ue_loc_fname)[:,0:2]
         self.boundary_points = np.load('boundary_points.npy',allow_pickle=True)
         self.neighbor_points = np.load('neighbor_points.npy',allow_pickle=True)
@@ -208,7 +208,9 @@ class BeamManagementEnv(gym.Env):
         self.boundary_neighbor_mid_dir = np.load('boundary_neighbor_mid_dir.npy',allow_pickle=True)
         #        self.unique_x = np.unique(self.ue_loc[:,0])
         #        self.unique_y = np.unique(self.ue_loc[:,1])
-        self.codebook_all, self.bf_directions = DFT_codebook(self.oversampling_factor)
+        # self.codebook_all, self.bf_directions = DFT_codebook(self.oversampling_factor)
+        self.codebook_all, self.bf_directions = self._generate_DFT_codebook()
+               
         self.t = 0
 #        self.n_current_UEs = 0
         self.traj = []
@@ -559,6 +561,31 @@ class BeamManagementEnv(gym.Env):
             else:
                 observation = beam_report      
         return observation
+    
+    def _load_channels(self):
+        all_h = np.load(h_real_fname) + 1j*np.load(h_imag_fname)
+        self.num_ant_total = all_h.shape[1]
+        assert(np.mod(self.num_ant_total, self.n_antenna)==0)
+        antenna_step = int(self.num_ant_total/self.n_antenna)
+        subsampled_antennas = np.arange(0,self.num_ant_total,antenna_step)
+        assert(len(subsampled_antennas)==self.n_antenna)
+        self.h = all_h[:,subsampled_antennas]
+            
+    def _generate_DFT_codebook(self):
+        nseg = int(self.n_antenna*self.oversampling_factor)
+        bfdirections = np.arccos(np.linspace(np.cos(0),np.cos(np.pi-1e-6),nseg))
+        codebook_all = np.zeros((nseg,self.n_antenna),dtype=np.complex_)
+        default_spacing = 0.5
+        spacing = default_spacing * self.num_ant_total / self.n_antenna
+        for i in range(nseg):
+            phi = bfdirections[i]
+            #array response vector original
+            arr_response_vec = [-1j*2*np.pi*spacing*k*np.cos(phi) for k in range(self.n_antenna)]
+            # arr_response_vec = [-1j*np.pi*k*np.cos(phi) for k in range(n_antenna)]
+            #array response vector for rotated ULA
+            #arr_response_vec = [1j*np.pi*k*np.sin(phi+np.pi/2) for k in range(64)]
+            codebook_all[i,:] = np.exp(arr_response_vec)/np.sqrt(self.n_antenna)
+        return codebook_all, bfdirections
 
         
 class BeamManagementEnvMultiFrame(gym.Env):
@@ -812,7 +839,9 @@ class BeamManagementEnvMultiFrame(gym.Env):
             self.baseline_beams = baseline_beamset
 #        self.current_h_per_UE = []
         return np.array(self.beam_report_history)[-self.window_length:,:]
-    
+ 
+if __name__ == "__main__":
+    env = BeamManagementEnv(num_antennas=32)    
 # if __name__ == "__main__":
 #     env = BeamManagementEnvMultiFrame(window_length = 5)
 #     env.reset()

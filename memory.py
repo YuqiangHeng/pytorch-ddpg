@@ -315,6 +315,24 @@ class BeamSpaceSequentialMemory(Memory):
         
         return state0_batch, action_batch, reward_batch, state1_batch, terminal1_batch
 
+    def get_recent_state(self, current_observation):
+        # This code is slightly complicated by the fact that subsequent observations might be
+        # from different episodes. We ensure that an experience never spans multiple episodes.
+        # This is probably not that important in practice but it seems cleaner.
+        state = [current_observation]
+        idx = len(self.recent_observations) - 1
+        for offset in range(0, self.window_length - 1):
+            current_idx = idx - offset
+            current_terminal = self.recent_terminals[current_idx - 1] if current_idx - 1 >= 0 else False
+            if current_idx < 0 or (not self.ignore_episode_boundaries and current_terminal):
+                # The previously handled observation was terminal, don't add the current one.
+                # Otherwise we would leak into a different episode.
+                break
+            state.insert(0, self.recent_observations[current_idx])
+        while len(state) < self.window_length:
+            state.insert(0, zeroed_observation(state[0]))
+        return np.array(state).reshape(self.window_length*self.num_measurements,-1)
+
 
     def append(self, observation, action, reward, terminal, training=True):
         super(BeamSpaceSequentialMemory, self).append(observation, action, reward, terminal, training=training)
