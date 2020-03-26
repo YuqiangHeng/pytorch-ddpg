@@ -629,18 +629,50 @@ class BeamManagementEnvMultiFrame(gym.Env):
         self.reward_log = {}
         self.seed()
         self.beam_report_history = []
+        self.use_saved_trajectory = False
+        self.num_saved_traj = None
+        
+    
+    def set_data_mode(self, use_saved_trajectory=False, num_saved_traj=None):
+        self.use_saved_trajectory = use_saved_trajectory
+        if use_saved_trajectory:
+            assert(not num_saved_traj is None)
+        self.num_saved_traj = num_saved_traj
+        if self.use_saved_trajectory:
+            self.saved_traj= np.load('saved_traj.npy')[0:self.num_saved_traj]
+            self.saved_traj_pos = np.load('saved_traj_pos.npy')[0:self.num_saved_traj]
+            self.saved_traj_edge_lengths = np.load('saved_traj_edge_lengths.npy')[0:self.num_saved_traj]
+            self.saved_traj_point_distances = np.load('saved_traj_point_distances.npy')[0:self.num_saved_traj]
+            self.saved_traj_total_len = np.load('saved_traj_total_len.npy')[0:self.num_saved_traj]
+            self.get_saved_traj_idx = 0
+        else:
+            self.saved_traj= None
+            self.saved_traj_pos = None
+            self.saved_traj_edge_lengths = None
+            self.saved_traj_point_distances = None
+            self.saved_traj_total_len = None
+            self.get_saved_traj_idx = None           
         
     def get_trajectory(self):
-        while True:
-            traj = gen_trajectory(self.neighbor_points, self.boundary_points,self.boundary_neighbor_mid_dir)
-            traj = np.array(traj)
-#            if len(traj)>100*self.ue_speed/0.35:
-            traj_pos = self.ue_loc[traj]
-            traj_edge_lengths = np.linalg.norm(np.diff(traj_pos, axis=0),axis=1)
-            traj_total_len = sum(traj_edge_lengths)
-            traj_point_distances = np.insert(np.cumsum(traj_edge_lengths) ,0,0)
-            if traj_total_len > (self.window_length+1)*self.ue_speed:
-                return traj, traj_pos, traj_edge_lengths, traj_total_len, traj_point_distances
+        if self.use_saved_trajectory:
+            traj = self.saved_traj[self.get_saved_traj_idx]
+            traj_pos = self.saved_traj_pos[self.get_saved_traj_idx]
+            traj_edge_lengths = self.saved_traj_edge_lengths[self.get_saved_traj_idx]
+            traj_total_len = self.saved_traj_total_len[self.get_saved_traj_idx]
+            traj_point_distances = self.saved_traj_point_distances[self.get_saved_traj_idx]
+            self.get_saved_traj_idx = (self.get_saved_traj_idx + 1) % self.num_saved_traj
+        else:
+            while True:
+                traj = gen_trajectory(self.neighbor_points, self.boundary_points,self.boundary_neighbor_mid_dir)
+                traj = np.array(traj)
+    #            if len(traj)>100*self.ue_speed/0.35:
+                traj_pos = self.ue_loc[traj]
+                traj_edge_lengths = np.linalg.norm(np.diff(traj_pos, axis=0),axis=1)
+                traj_total_len = sum(traj_edge_lengths)
+                traj_point_distances = np.insert(np.cumsum(traj_edge_lengths) ,0,0)
+                if traj_total_len > (self.window_length+1)*self.ue_speed:
+                    break
+        return traj, traj_pos, traj_edge_lengths, traj_total_len, traj_point_distances
     
     def measure_beams_single_UE(self,ue_pos, beam_idc):
         #return the SNR (dB) of selected beams in beam_idc (array) using the h matrix at ue_pos (global index for h)
@@ -851,6 +883,26 @@ if __name__ == "__main__":
 #         print(s,r)
 #         if done:
 #             break
+
+# from tqdm import tqdm
+
+# if __name__ == "__main__":
+#     num_trajs = int(1e6)
+#     env = BeamManagementEnv(ue_speed=15)
+#     data = {'traj':[],'traj_pos':[],'traj_edge_lengths':[],'traj_total_len':[],'traj_point_distances':[]}
+#     for i in tqdm(range(num_trajs)):
+#         traj, traj_pos, traj_edge_lengths, traj_total_len, traj_point_distances = env.get_trajectory()
+#         data['traj'].append(traj)
+#         data['traj_pos'].append(traj_pos)
+#         data['traj_edge_lengths'].append(traj_edge_lengths)
+#         data['traj_total_len'].append(traj_total_len)
+#         data['traj_point_distances'].append(traj_point_distances)
+#     np.save('saved_traj',data['traj'])
+#     np.save('saved_traj_pos',data['traj_pos'])
+#     np.save('saved_traj_edge_lengths',data['traj_edge_lengths'])
+#     np.save('saved_traj_total_len',data['traj_total_len'])
+#     np.save('saved_traj_point_distances',data['traj_point_distances'])
+    
 #from tqdm import tqdm     
 # import matplotlib.pyplot as plt
 # if __name__ == "__main__":
