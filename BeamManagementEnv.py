@@ -20,7 +20,7 @@ h_imag_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_imag.npy"
 h_real_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_real.npy"
 ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
 
-all_loc = np.load(ue_loc_fname)[:,0:2]
+# all_loc = np.load(ue_loc_fname)[:,0:2]
 #boundary_points = [i for i in range(all_loc.shape[0]) if len(np.nonzero(np.linalg.norm(all_loc-all_loc[i],axis=1)<0.6)[0])<9]
 ##edges = alpha_shape(all_loc[:,0:2], alpha=0.25, only_outer=True)
 ##boundary_points = np.unique(np.array(list(edges)).flatten())
@@ -80,11 +80,11 @@ all_loc = np.load(ue_loc_fname)[:,0:2]
 #np.save('boundary_neighbor_dir_lists',boundary_neighbor_dir_lists)
 #np.save('boundary_neighbor_mid_dir',boundary_neighbor_mid_dir)
 
-boundary_points = np.load('boundary_points.npy',allow_pickle=True)
-neighbor_points = np.load('neighbor_points.npy',allow_pickle=True)
-neighbor_dir_lists = np.load('neighbor_dir_lists.npy',allow_pickle=True)
-boundary_neighbor_dir_lists = np.load('boundary_neighbor_dir_lists.npy',allow_pickle=True)
-boundary_neighbor_mid_dir = np.load('boundary_neighbor_mid_dir.npy',allow_pickle=True)
+# boundary_points = np.load('boundary_points.npy',allow_pickle=True)
+# neighbor_points = np.load('neighbor_points.npy',allow_pickle=True)
+# neighbor_dir_lists = np.load('neighbor_dir_lists.npy',allow_pickle=True)
+# boundary_neighbor_dir_lists = np.load('boundary_neighbor_dir_lists.npy',allow_pickle=True)
+# boundary_neighbor_mid_dir = np.load('boundary_neighbor_mid_dir.npy',allow_pickle=True)
 
 
 
@@ -221,18 +221,61 @@ class BeamManagementEnv(gym.Env):
         self.prev_info = {}
         self.reward_log = {}
         self.seed()
+        self.use_saved_trajectory = False
+        self.num_saved_traj = None
         
+    def set_data_mode(self, use_saved_trajectory=False, num_saved_traj=None):
+        self.use_saved_trajectory = use_saved_trajectory
+        if use_saved_trajectory:
+            assert(not num_saved_traj is None)
+        self.num_saved_traj = num_saved_traj
+        if self.use_saved_trajectory:
+            self.saved_traj= np.load('saved_traj.npy',allow_pickle=True)[0:self.num_saved_traj]
+            self.saved_traj_pos = np.load('saved_traj_pos.npy',allow_pickle=True)[0:self.num_saved_traj]
+            self.saved_traj_edge_lengths = np.load('saved_traj_edge_lengths.npy',allow_pickle=True)[0:self.num_saved_traj]
+            self.saved_traj_point_distances = np.load('saved_traj_point_distances.npy',allow_pickle=True)[0:self.num_saved_traj]
+            self.saved_traj_total_len = np.load('saved_traj_total_len.npy',allow_pickle=True)[0:self.num_saved_traj]
+            self.get_saved_traj_idx = 0
+        else:
+            self.saved_traj= None
+            self.saved_traj_pos = None
+            self.saved_traj_edge_lengths = None
+            self.saved_traj_point_distances = None
+            self.saved_traj_total_len = None
+            self.get_saved_traj_idx = None   
 
     def get_trajectory(self):
-        while True:
-            traj = gen_trajectory(self.neighbor_points, self.boundary_points,self.boundary_neighbor_mid_dir)
-            traj = np.array(traj)
-            traj_pos = self.ue_loc[traj]
-            traj_edge_lengths = np.linalg.norm(np.diff(traj_pos, axis=0),axis=1)
-            traj_total_len = sum(traj_edge_lengths)
-            traj_point_distances = np.insert(np.cumsum(traj_edge_lengths) ,0,0)
-            if traj_total_len > self.ue_speed*5:
-                return traj, traj_pos, traj_edge_lengths, traj_total_len, traj_point_distances
+        if self.use_saved_trajectory:
+            traj = self.saved_traj[self.get_saved_traj_idx]
+            traj_pos = self.saved_traj_pos[self.get_saved_traj_idx]
+            traj_edge_lengths = self.saved_traj_edge_lengths[self.get_saved_traj_idx]
+            traj_total_len = self.saved_traj_total_len[self.get_saved_traj_idx]
+            traj_point_distances = self.saved_traj_point_distances[self.get_saved_traj_idx]
+            self.get_saved_traj_idx = (self.get_saved_traj_idx + 1) % self.num_saved_traj
+        else:
+            while True:
+                traj = gen_trajectory(self.neighbor_points, self.boundary_points,self.boundary_neighbor_mid_dir)
+                traj = np.array(traj)
+    #            if len(traj)>100*self.ue_speed/0.35:
+                traj_pos = self.ue_loc[traj]
+                traj_edge_lengths = np.linalg.norm(np.diff(traj_pos, axis=0),axis=1)
+                traj_total_len = sum(traj_edge_lengths)
+                traj_point_distances = np.insert(np.cumsum(traj_edge_lengths) ,0,0)
+                # if traj_total_len > (self.window_length+1)*self.ue_speed:
+                if traj_total_len > self.ue_speed*5:
+                    break
+        return traj, traj_pos, traj_edge_lengths, traj_total_len, traj_point_distances
+            
+    # def get_trajectory(self):
+    #     while True:
+    #         traj = gen_trajectory(self.neighbor_points, self.boundary_points,self.boundary_neighbor_mid_dir)
+    #         traj = np.array(traj)
+    #         traj_pos = self.ue_loc[traj]
+    #         traj_edge_lengths = np.linalg.norm(np.diff(traj_pos, axis=0),axis=1)
+    #         traj_total_len = sum(traj_edge_lengths)
+    #         traj_point_distances = np.insert(np.cumsum(traj_edge_lengths) ,0,0)
+    #         if traj_total_len > self.ue_speed*5:
+    #             return traj, traj_pos, traj_edge_lengths, traj_total_len, traj_point_distances
             
 #     def get_trajectory(self):
 #         while True:
@@ -588,301 +631,36 @@ class BeamManagementEnv(gym.Env):
         return codebook_all, bfdirections
 
         
-class BeamManagementEnvMultiFrame(gym.Env):
-    def __init__(self, window_length: int = 1,
-                 oversampling_factor: int = 1,
-                 num_antennas : int = 64,
-                 num_beams_per_UE: int = 8,
-                 ue_speed = 5,
-                 enable_baseline = False,
-                 enable_genie = False):
-        self.enable_baseline = enable_baseline
-        self.enable_genie = enable_genie
-        self.window_length = window_length
-        self.n_antenna = num_antennas
-        self.oversampling_factor = oversampling_factor
-        self.codebook_size = int(self.n_antenna*self.oversampling_factor)
-        self.num_beams_per_UE = num_beams_per_UE
-        self.action_space = spaces.MultiBinary(self.codebook_size)
-        self.observation_space = spaces.Box(low = np.full(self.codebook_size,-np.inf), high = np.full(self.codebook_size,np.inf), dtype=np.float32)
-#        self.observation_space = spaces.MultiDiscrete(np.inf*np.ones(self.codebook_size))
-        self.true_state = np.zeros((self.codebook_size))
-        
-        self.h = np.load(h_real_fname) + 1j*np.load(h_imag_fname)
-        self.ue_loc = np.load(ue_loc_fname)[:,0:2]
-        self.boundary_points = np.load('boundary_points.npy',allow_pickle=True)
-        self.neighbor_points = np.load('neighbor_points.npy',allow_pickle=True)
-        self.neighbor_dir_lists = np.load('neighbor_dir_lists.npy',allow_pickle=True)
-        self.boundary_neighbor_dir_lists = np.load('boundary_neighbor_dir_lists.npy',allow_pickle=True)
-        self.boundary_neighbor_mid_dir = np.load('boundary_neighbor_mid_dir.npy',allow_pickle=True)
-        #        self.unique_x = np.unique(self.ue_loc[:,0])
-        #        self.unique_y = np.unique(self.ue_loc[:,1])
-        self.codebook_all, self.bf_directions = DFT_codebook(self.oversampling_factor)
-        self.t = 0
-#        self.n_current_UEs = 0
-        self.traj = []
-        self.current_UE_pos = 0
-        self.assigned_beams_per_UE = []
-        self.current_state_single_frame = []
-        self.ue_speed = ue_speed
-        self.prev_info = {}
-        self.reward_log = {}
-        self.seed()
-        self.beam_report_history = []
-        self.use_saved_trajectory = False
-        self.num_saved_traj = None
-        
-    
-    def set_data_mode(self, use_saved_trajectory=False, num_saved_traj=None):
-        self.use_saved_trajectory = use_saved_trajectory
-        if use_saved_trajectory:
-            assert(not num_saved_traj is None)
-        self.num_saved_traj = num_saved_traj
-        if self.use_saved_trajectory:
-            self.saved_traj= np.load('saved_traj.npy')[0:self.num_saved_traj]
-            self.saved_traj_pos = np.load('saved_traj_pos.npy')[0:self.num_saved_traj]
-            self.saved_traj_edge_lengths = np.load('saved_traj_edge_lengths.npy')[0:self.num_saved_traj]
-            self.saved_traj_point_distances = np.load('saved_traj_point_distances.npy')[0:self.num_saved_traj]
-            self.saved_traj_total_len = np.load('saved_traj_total_len.npy')[0:self.num_saved_traj]
-            self.get_saved_traj_idx = 0
-        else:
-            self.saved_traj= None
-            self.saved_traj_pos = None
-            self.saved_traj_edge_lengths = None
-            self.saved_traj_point_distances = None
-            self.saved_traj_total_len = None
-            self.get_saved_traj_idx = None           
-        
-    def get_trajectory(self):
-        if self.use_saved_trajectory:
-            traj = self.saved_traj[self.get_saved_traj_idx]
-            traj_pos = self.saved_traj_pos[self.get_saved_traj_idx]
-            traj_edge_lengths = self.saved_traj_edge_lengths[self.get_saved_traj_idx]
-            traj_total_len = self.saved_traj_total_len[self.get_saved_traj_idx]
-            traj_point_distances = self.saved_traj_point_distances[self.get_saved_traj_idx]
-            self.get_saved_traj_idx = (self.get_saved_traj_idx + 1) % self.num_saved_traj
-        else:
-            while True:
-                traj = gen_trajectory(self.neighbor_points, self.boundary_points,self.boundary_neighbor_mid_dir)
-                traj = np.array(traj)
-    #            if len(traj)>100*self.ue_speed/0.35:
-                traj_pos = self.ue_loc[traj]
-                traj_edge_lengths = np.linalg.norm(np.diff(traj_pos, axis=0),axis=1)
-                traj_total_len = sum(traj_edge_lengths)
-                traj_point_distances = np.insert(np.cumsum(traj_edge_lengths) ,0,0)
-                if traj_total_len > (self.window_length+1)*self.ue_speed:
-                    break
-        return traj, traj_pos, traj_edge_lengths, traj_total_len, traj_point_distances
-    
-    def measure_beams_single_UE(self,ue_pos, beam_idc):
-        #return the SNR (dB) of selected beams in beam_idc (array) using the h matrix at ue_pos (global index for h)
-        result = np.absolute(np.matmul(self.h[ue_pos,:], np.transpose(np.conj(self.codebook_all[beam_idc]))))**2
-        return 30 + 10*np.log10(result)-(-94)
-                
-    def step(self, action): #action is codebook_size x 1 mulit bineary vector indicting which beams are activated
-#        self.assigned_beams_per_UE = np.nonzero(action)[0]
-        self.assigned_beams_per_UE = np.argsort(action)[-self.num_beams_per_UE:]
-        info = {}
-        #get reward
-        ue_traveled_dist_next = (self.t+1)*self.ue_speed
-        episode_end = False
-        if ue_traveled_dist_next >= max(self.traj_point_distances):
-            ue_traveled_dist_next = max(self.traj_point_distances)
-            episode_end = True
-        total_segment_length = ue_traveled_dist_next - self.ue_traveled_distance
-        idc_in_traj_covered = np.nonzero(np.logical_and(self.traj_point_distances > self.ue_traveled_distance, self.traj_point_distances < ue_traveled_dist_next))[0] #idc of points in traj in the segment
-#        print(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])
-        if len(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0]) == 0:
-            print('ohh')
-        prev_h_idc_in_traj = min(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])-1
-        h_idc_in_traj_covered = np.insert(idc_in_traj_covered,0,prev_h_idc_in_traj) #idc of h (local idc) in traj, including starting h (last point in prev segment)
-        h_idc_covered = self.traj[h_idc_in_traj_covered] #global idc
-        if len(h_idc_covered) == 1:
-            # H doesnt change within the segment
-            segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.assigned_beams_per_UE)
-            reward = np.log2(1+10**(max(segment_bf_gains)/10))
-        else:
-            reward = 0
-            for i in range(len(h_idc_covered)):
-                segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], self.assigned_beams_per_UE)
-                segment_achievable_rate = np.log2(1+10**(max(segment_bf_gains)/10))
-                if i == 0:
-                    segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                    segment_start = self.ue_traveled_distance
-                if i == len(h_idc_covered)-1:
-                    segment_end = ue_traveled_dist_next
-                    segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                if i > 0 and i < len(h_idc_covered)-1:
-                    segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                    segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                reward += segment_achievable_rate*(segment_end - segment_start)/total_segment_length  
-        self.prev_info['agent_reward'] = reward
-        self.reward_log['agent'].append(reward)
-
-        if self.enable_baseline:
-            if len(h_idc_covered) == 1:
-                # H doesnt change within the segment
-                baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.baseline_beams)
-                baseline_reward = np.log2(1+10**(max(baseline_segment_bf_gains)/10))
-            else:
-                baseline_reward = 0
-                for i in range(len(h_idc_covered)):
-                    baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], self.baseline_beams)
-                    baseline_segment_achievable_rate = np.log2(1+10**(max(baseline_segment_bf_gains)/10))
-                    if i == 0:
-                        segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                        segment_start = self.ue_traveled_distance
-                    if i == len(h_idc_covered)-1:
-                        segment_end = ue_traveled_dist_next
-                        segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                    if i > 0 and i < len(h_idc_covered)-1:
-                        segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                        segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                    baseline_reward += baseline_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
-            info['baseline_reward'] = baseline_reward
-            self.prev_info['baseline_reward'] = baseline_reward
-            self.reward_log['baseline'].append(baseline_reward)
-        
-        if self.enable_genie:
-            if len(h_idc_covered) == 1:
-                # H doesnt change within the segment
-                genie_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], np.arange(self.codebook_size))
-                genie_reward = np.log2(1+10**(max(genie_segment_bf_gains)/10))
-                genie_beam = np.argmax(genie_segment_bf_gains)
-                info['genie_beams'] = [genie_beam]
-            else:
-                genie_reward = 0
-                info['genie_beams'] = []
-                for i in range(len(h_idc_covered)):
-                    genie_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], np.arange(self.codebook_size))
-                    genie_segment_achievable_rate = np.log2(1+10**(max(genie_segment_bf_gains)/10))
-                    info['genie_beams'].append(np.argmax(genie_segment_bf_gains))
-                    if i == 0:
-                        segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                        segment_start = self.ue_traveled_distance
-                    if i == len(h_idc_covered)-1:
-                        segment_end = ue_traveled_dist_next
-                        segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                    if i > 0 and i < len(h_idc_covered)-1:
-                        segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                        segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                    genie_reward += genie_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
-            info['genie_reward'] = genie_reward
-            info['genie_beams'] = np.unique(info['genie_beams'])
-            self.prev_info['genie_reward'] = genie_reward
-            self.reward_log['genie'].append(genie_reward)
-            
-                     
-        self.t += 1
-        self.ue_traveled_distance = self.t*self.ue_speed
-        self.current_idc_in_traj = max(np.nonzero(self.traj_point_distances < self.ue_traveled_distance)[0])
-        self.current_h_idc = self.traj[self.current_idc_in_traj]
-        assigned_bf_gains = self.measure_beams_single_UE(self.current_h_idc, self.assigned_beams_per_UE)
-        beam_report = np.zeros((self.codebook_size))
-        beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
-        if self.enable_baseline:
-            baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
-            self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
-            info['baseline_beams'] = self.baseline_beams
-        
-        self.beam_report_history.append(beam_report)
-        assert(len(self.beam_report_history)>=self.window_length)
-        return np.array(self.beam_report_history)[-self.window_length:,:], reward, episode_end, info
-
-    def initialization_step(self, beamset): #action is codebook_size x 1 mulit bineary vector indicting which beams are activated
-        #beam set is a list of beam indices (different from that in self.step())
-        self.t += 1
-        self.ue_traveled_distance = self.t*self.ue_speed
-        self.current_idc_in_traj = max(np.nonzero(self.traj_point_distances < self.ue_traveled_distance)[0])
-        self.current_h_idc = self.traj[self.current_idc_in_traj]
-        assigned_bf_gains = self.measure_beams_single_UE(self.current_h_idc, beamset)
-        beam_report = np.zeros((self.codebook_size))
-        beam_report[beamset] = assigned_bf_gains
-        return beam_report
-        # return np.array(self.beam_report_history)[-self.window_length:,:], reward, episode_end, info    
-    
-    def render(self):
-        print(self.prev_info)
-        
-    def set_ue_speed(self,speed):
-        self.ue_speed = speed
-
-    def seed(self, seed=None):
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
-        
-    def get_initial_beam_assignment(self):
-        bf_gains = self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size))
-        best_beams = np.argsort(bf_gains)[-self.num_beams_per_UE:]
-        best_bf_gains = bf_gains[best_beams]
-        return best_beams, best_bf_gains
-    
-    def calc_baseline_beams(self, baseline_max_beam):
-        #calculate the moving spatial window beamset
-        if baseline_max_beam < 3:
-            baseline_beamset_start = 0
-            baseline_beamset_end = baseline_beamset_start+self.num_beams_per_UE
-        elif baseline_max_beam > self.codebook_size-5:
-            baseline_beamset_end = self.codebook_size
-            baseline_beamset_start = baseline_beamset_end-self.num_beams_per_UE
-        else:
-            baseline_beamset_start = baseline_max_beam-3
-            baseline_beamset_end = baseline_max_beam+5
-        baseline_beamset = np.arange(baseline_beamset_start,baseline_beamset_end)
-        assert(len(baseline_beamset) == self.num_beams_per_UE)    
-        return baseline_beamset
-    
-    def reset(self):
-        self.t = 0
-        # self.ue_speed = 5 
-#        self.n_current_UEs = 0
-        self.reward_log = {}
-        self.reward_log['agent'] = []
-        if self.enable_baseline:
-            self.reward_log['baseline'] = []
-        if self.enable_genie:
-            self.reward_log['genie'] = []
-        self.beam_report_history = []   
-        self.traj, self.traj_pos, self.traj_edge_lengths, self.traj_total_len, self.traj_point_distances = self.get_trajectory()
-        # self.traj = self.get_trajectory()
-        # self.traj_pos = self.ue_loc[self.traj]
-        # self.traj_edge_lengths = np.linalg.norm(np.diff(self.traj_pos, axis=0),axis=1)
-        # self.traj_point_distances = np.insert(np.cumsum(self.traj_edge_lengths) ,0,0)
-        self.ue_traveled_distance = self.t*self.ue_speed
-        self.current_idc_in_traj = max(np.nonzero(self.traj_point_distances <= self.ue_traveled_distance)[0])
-        self.current_h_idc = self.traj[self.current_idc_in_traj]
-        self.assigned_beams_per_UE, assigned_bf_gains = self.get_initial_beam_assignment()
-        
-        beam_report = np.zeros((self.codebook_size))
-        beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
-        self.current_state_single_frame = beam_report
-        self.beam_report_history.append(beam_report)
-        
-        if self.enable_baseline:
-            baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
-            baseline_beamset = self.calc_baseline_beams(baseline_max_beam)
-            self.baseline_beams = baseline_beamset
-            
-        for i in range(self.window_length-1):
-            baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
-            baseline_beamset = self.calc_baseline_beams(baseline_max_beam)
-            init_beam_report = self.initialization_step(baseline_beamset)
-            self.beam_report_history.append(init_beam_report)
-            self.baseline_beams = baseline_beamset
-#        self.current_h_per_UE = []
-        return np.array(self.beam_report_history)[-self.window_length:,:]
  
-if __name__ == "__main__":
-    env = BeamManagementEnv(num_antennas=32)    
 # if __name__ == "__main__":
-#     env = BeamManagementEnvMultiFrame(window_length = 5)
+#     env = BeamManagementEnv(num_antennas=32)    
+
+# if __name__ == "__main__":
+#     env = BeamManagementEnv()
+#     env.set_data_mode(use_saved_trajectory=True,num_saved_traj=50)
 #     env.reset()
 #     while True:
-#         action = np.random.rand(64)
-#         s,r,done,info = env.step(action)
-#         print(s,r)
+#         action = np.random.choice(np.arange(env.codebook_size),env.num_beams_per_UE,replace=False)
+#         binary_action = np.zeros((env.codebook_size))
+#         binary_action[action] = 1
+#         s,r,done,info = env.step(binary_action)
 #         if done:
-#             break
+#             print(env.get_saved_traj_idx)
+#             env.reset()
+#             if env.get_saved_traj_idx == 0:
+#                 env.set_data_mode(use_saved_trajectory=False)
+#                 print(env.get_saved_traj_idx)
+#                 env.reset()
+#                 while True:
+#                     action = np.random.choice(np.arange(env.codebook_size),env.num_beams_per_UE,replace=False)
+#                     binary_action = np.zeros((env.codebook_size))
+#                     binary_action[action] = 1
+#                     st,rt,donet,infot = env.step(binary_action)
+#                     if donet:
+#                         print('finished random episode')
+#                         break
+#                 break
+            
 
 # from tqdm import tqdm
 

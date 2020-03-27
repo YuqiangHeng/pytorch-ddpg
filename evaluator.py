@@ -7,15 +7,19 @@ from util import *
 
 class Evaluator(object):
 
-    def __init__(self, num_episodes, interval, save_path='', max_episode_length=None):
+    def __init__(self, num_episodes, interval, save_path='', max_episode_length=None, use_saved_traj=False):
         self.num_episodes = num_episodes
         self.max_episode_length = max_episode_length
         self.interval = interval
         self.save_path = save_path
         self.results = np.array([]).reshape(num_episodes,0)
+        self.use_saved_traj = use_saved_traj
 
     def __call__(self, env, policy, debug=False, visualize=False, save=True):
-
+        if self.use_saved_traj:
+            env.set_data_mode(use_saved_trajectory = self.use_saved_traj, num_saved_traj = self.num_episodes)
+        else:
+            env.set_data_mode(use_saved_trajectory = self.use_saved_traj)
         self.is_training = False
         observation = None
         result = []
@@ -55,6 +59,10 @@ class Evaluator(object):
 
         if save:
             self.save_results('{}/validate_reward'.format(self.save_path))
+        
+        # allow env to generate traj
+        env.set_data_mode(use_saved_trajectory = False, num_saved_traj = None)
+        
         return np.mean(result)
 
     def save_results(self, fn):

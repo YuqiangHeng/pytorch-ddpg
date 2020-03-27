@@ -11,7 +11,7 @@ from evaluator import Evaluator
 from ddpg import DDPG
 from multiwindow_DDPG import multiwindow_DDPG
 from util import *
-from BeamManagementEnv import BeamManagementEnv, BeamManagementEnvMultiFrame
+from BeamManagementEnv import BeamManagementEnv
 import matplotlib.pyplot as plt
 
 # gym.undo_logger_setup()
@@ -51,15 +51,17 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
         if step > args.warmup :
             agent.update_policy()
         
-        # # [optional] evaluate
-        # if evaluate is not None and validate_steps > 0 and step % validate_steps == 0:
-        #     policy = lambda x: agent.select_action(x, decay_epsilon=False)
-        #     validate_reward = evaluate(env, policy, debug=False, visualize=False)
-        #     if debug: prYellow('[Evaluate] Step_{:07d}: mean_reward:{}'.format(step, validate_reward))
+        # [optional] evaluate
+        if evaluate is not None and validate_steps > 0 and step % validate_steps == 0:
+            policy = lambda x: agent.select_action(x, decay_epsilon=False)
+            val_env = deepcopy(env)
+            validate_reward = evaluate(val_env, policy, debug=False, visualize=False)
+            # if debug: prYellow('[Evaluate] Step_{:07d}: mean_reward:{}'.format(step, validate_reward))
+            print('[Evaluate] Step_{:07d}: mean_reward:{}'.format(step, validate_reward))
 
-        # [optional] save intermideate model
-        if step % int(num_iterations/100) == 0:
-            agent.save_model(output)
+        # # [optional] save intermideate model
+        # if step % int(num_iterations/100) == 0:
+        #     agent.save_model(output)
 
         # update 
         step += 1
@@ -153,7 +155,7 @@ if __name__ == "__main__":
     parser.add_argument('--validate_steps', default=2000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=100000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=10000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -163,17 +165,18 @@ if __name__ == "__main__":
     parser.add_argument('--num_measurements', default=5,type=int)
     # parser.add_argument('--l2norm', default=0.01, type=float, help='l2 weight decay') # TODO
     # parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
-    parser.add_argument('--num_beams_per_UE',default=1,type=int)
+    parser.add_argument('--num_beams_per_UE',default=8,type=int)
     parser.add_argument('--enable_baseline',default=True)
     parser.add_argument('--enable_genie',default=True)
     parser.add_argument('--ue_speed',default=10)
-    parser.add_argument('--full_observation', default=True)
+    parser.add_argument('--full_observation', default=False)
     parser.add_argument('--conv2d_1_kernel_size',type=int,default=5)
     parser.add_argument('--conv2d_2_kernel_size',type=int,default=3)
     parser.add_argument('--oversampling_factor',type=int,default=1)
     parser.add_argument('--num_antennas',type=int,default=8)
+    parser.add_argument('--use_saved_traj_in_validation',default=True)
     
-    parser.add_argument('--debug', default = True, dest='debug')
+    parser.add_argument('--debug', default = False, dest='debug')
 
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)
@@ -203,8 +206,11 @@ if __name__ == "__main__":
 
     # agent = DDPG(nb_states, nb_actions, window_len, args)
     agent = multiwindow_DDPG(nb_states, nb_actions, args)
-    evaluate = Evaluator(args.validate_episodes, 
-        args.validate_steps, args.output, max_episode_length=args.max_episode_length)
+    evaluate = Evaluator(num_episodes = args.validate_episodes, 
+                         interval = args.validate_steps, 
+                         save_path = args.output, 
+                         max_episode_length=args.max_episode_length,
+                         use_saved_traj= args.use_saved_traj_in_validation)
     
     
     if args.mode == 'train':
