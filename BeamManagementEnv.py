@@ -180,7 +180,8 @@ class BeamManagementEnv(gym.Env):
            enable_genie = False,
            combine_state = False,
            full_observation = False,
-           num_measurements = 1):
+           num_measurements = 1,
+           min_traj_len = 5):
         self.enable_baseline = enable_baseline
         self.enable_genie = enable_genie
         self.combine_state = combine_state #flag for whether to include previous action in state representation: s(t)=[ob(t),a(t-1)]
@@ -191,6 +192,7 @@ class BeamManagementEnv(gym.Env):
         self.codebook_size = int(self.n_antenna*self.oversampling_factor)
         self.num_beams_per_UE = num_beams_per_UE
         self.action_space = spaces.MultiBinary(self.codebook_size)
+        self.min_traj_len = min_traj_len
         if self.combine_state:
             self.observation_space = spaces.Box(low = np.full(int(2*self.codebook_size),-np.inf), high = np.full(int(2*self.codebook_size),np.inf), dtype=np.float32)
         else:
@@ -262,7 +264,7 @@ class BeamManagementEnv(gym.Env):
                 traj_total_len = sum(traj_edge_lengths)
                 traj_point_distances = np.insert(np.cumsum(traj_edge_lengths) ,0,0)
                 # if traj_total_len > (self.window_length+1)*self.ue_speed:
-                if traj_total_len > self.ue_speed*5:
+                if traj_total_len > self.ue_speed*self.min_traj_len:
                     break
         return traj, traj_pos, traj_edge_lengths, traj_total_len, traj_point_distances
             

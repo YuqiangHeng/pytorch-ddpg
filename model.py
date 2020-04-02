@@ -25,6 +25,13 @@ def fanin_init(size, fanin=None):
     v = 1. / np.sqrt(fanin)
     return torch.Tensor(size).uniform_(-v, v)
 
+def conv_output_size(shape,padding,dilation,kernel_size,stride):
+    return np.floor((shape + 2 * padding - dilation * (kernel_size - 1)-1) / stride + 1)
+
+def conv2d_output_dim(shape,padding,dilation,kernel_size,stride):
+    return (conv_output_size(shape[0],padding[0],dilation[0],kernel_size[0],stride[0]),conv_output_size(shape[1],padding[1],dilation[1],kernel_size[1],stride[1]))
+    
+
 # class Actor(nn.Module):
 #     def __init__(self, nb_states, nb_actions, hidden1=400, hidden2=300, init_w=3e-3):
 #         super(Actor, self).__init__()
@@ -199,6 +206,103 @@ class Critic(nn.Module):
         out = self.tanh(out)
         return out    
     
+    
+class ConvAutoEncoder(nn.Module):
+    def __init__(self, nb_states, nb_actions, window_len):
+        super().__init__()
+        self.flatten = nn.Flatten()
+        self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=3,stride=1,padding=1),
+                                    nn.ReLU(),
+                                    nn.MaxPool2d(2,2))
+        self.conv2 = nn.Sequential(nn.Conv2d(16,4,kernel_size=3,stride=(2,1),padding=1),
+                                    nn.ReLU(),
+                                    nn.MaxPool2d(2,2))
+        self.deconv1 = nn.Sequential(nn.ConvTranspose2d(4,16,kernel_size=(2,2),stride=(1,2),padding=(0,0)),
+                                    nn.ReLU())
+        self.deconv2 = nn.Sequential(nn.ConvTranspose2d(16,1,kernel_size=(2,2),stride=(2,2),padding=(1,0)),
+                                    nn.Sigmoid())
+        self.input_shape = (window_len,nb_states)
+        
+        self._print_encoded_shape()
+        self._print_decoded_shape()
+        
+    def _encode_features(self,x):
+        out = x.unsqueeze(0)
+        out = self.conv1(out)
+        out = self.conv2(out)
+        return out
+    
+    def _print_encoded_shape(self):
+        batch_size = 1
+        dummy_input = torch.autograd.Variable(torch.rand(batch_size, *self.input_shape))
+        output_feat = self._encode_features(dummy_input)
+        print(output_feat.shape)
+    
+    def _print_decoded_shape(self):
+        batch_size = 1
+        dummy_input = torch.autograd.Variable(torch.rand(batch_size, *self.input_shape))
+        output_feat = self.forward(dummy_input)
+        print(output_feat.shape)
+    
+    def forward(self, x):
+        # print(x.size())
+        encoded = x.unsqueeze(1)
+        encoded = self.conv1(encoded)
+        encoded = self.conv2(encoded)
+        decoded = self.deconv1(encoded)
+        decoded = self.deconv2(decoded)
+        return decoded.squeeze(1)
+        
+        
+from BeamManagementEnv import BeamManagementEnv
+from memory import SequentialMemory,BeamSpaceSequentialMemory
+from torch.autograd import Variable
+
+FLOAT = torch.FloatTensor
+def to_tensor(ndarray, volatile=False, requires_grad=False, dtype=FLOAT):
+    return Variable(
+        torch.from_numpy(ndarray), volatile=volatile, requires_grad=requires_grad
+    ).type(dtype)
+
+if __name__ == "__main__":
+    window_len = 4
+    ue_speed = 15
+    num_measurements = 16
+    train_iter = int(1e5)
+    warm_up = 100
+    batch_size = 32
+    memory = BeamSpaceSequentialMemory(limit=600000, window_length=window_len, num_measurements=num_measurements)
+    env = BeamManagementEnv(ue_speed=ue_speed,num_beams_per_UE=64,num_measurements=num_measurements,min_traj_len = 10)
+    ob_t = env.reset()
+    nb_actions = env.action_space.shape[0]
+    nb_states = env.observation_space.shape[0]
+    model = ConvAutoEncoder(nb_states=nb_states,nb_actions=nb_actions,window_len=window_len*num_measurements)
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    a_t = np.ones((nb_actions))
+    train_episode_idx = 0
+    train_step_idx = 0
+    train_loss = 0
+    done = False
+    while train_episode_idx < train_iter:
+        ob_t_1, r_t, done, info = env.step(a_t)
+        memory.append(ob_t,a_t,r_t,done)
+        ob_t = ob_t_1
+        if train_step_idx > warm_up:
+            state_batch, action_batch, reward_batch, next_state_batch, terminal_batch = memory.sample_and_split(batch_size)
+            predicted_next_state_batch = model(to_tensor(state_batch))
+            loss = criterion(predicted_next_state_batch, to_tensor(next_state_batch))
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+        if done:
+            train_episode_idx += 1
+            if train_step_idx > warm_up:print('Epoch: {} \tTraining Loss: {:.6f}'.format(train_episode_idx, train_loss))
+            train_loss = 0
+            ob_t = env.reset()
+        train_step_idx += 1
+
+        
  
 # from BeamManagement import BeamManagementEnv, BeamManagementEnvMultiFrame
 # if __name__ == "__main__":
