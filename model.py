@@ -206,21 +206,105 @@ class Critic(nn.Module):
         out = self.tanh(out)
         return out    
     
+class MLP(nn.Module):
+    def __init__(self, nb_states, window_len, num_measurements):
+        super().__init__()
+        self.flatten = nn.Flatten()
+        self.input_shape = (window_len*num_measurements, nb_states)
+        nsize = self._serial_input_size(self.input_shape)
+        hidden1 = int(nsize/2)
+        hidden2 = int(nsize/4)
+        hidden3 = int(nsize/8)
+        self.outdim = num_measurements*nb_states
+        self.outshape = (num_measurements,nb_states)
+        self.fc1 = nn.Sequential(nn.Linear(nsize,hidden1),
+                                    nn.ReLU())
+        self.fc2 = nn.Sequential(nn.Linear(hidden1,hidden2),
+                                    nn.ReLU())
+        self.fc3 = nn.Sequential(nn.Linear(hidden2,hidden2),
+                                    nn.ReLU())
+        self.fc4 = nn.Sequential(nn.Linear(hidden2,hidden2),
+                                    nn.ReLU())
+        self.fc5 = nn.Sequential(nn.Linear(hidden2,self.outdim),
+                                    nn.ReLU())
+        self.fc6 = nn.Linear(self.outdim,self.outdim)
+
+    def _serial_input_size(self, shape):
+        batch_size = 1
+        dummy_input = torch.autograd.Variable(torch.rand(batch_size, *shape))
+        dummy_flat = self.flatten(dummy_input)
+        nsize = dummy_flat.data.view(batch_size,-1).size(1)
+        return nsize
+
+
+    def forward(self,x):
+        flat = self.flatten(x)
+        out = self.fc1(flat)
+        out = self.fc2(out)
+        out = self.fc3(out)
+        out = self.fc4(out)
+        out = self.fc5(out)
+        out = self.fc6(out)
+        out = out.view(-1,*self.outshape)
+        return out
+
+
+class SerializedAutonEncoder(nn.Module):
+    def __init__(self, nb_states, window_len, num_measurements):
+        super().__init__()
+        self.flatten = nn.Flatten()
+        self.input_shape = (window_len*num_measurements, nb_states)
+        nsize = self._serial_input_size(self.input_shape)
+        hidden1 = int(nsize/2)
+        hidden2 = int(nsize/4)
+        hidden3 = int(nsize/8)
+        self.outdim = num_measurements*nb_states
+        self.outshape = (num_measurements,nb_states)
+        self.encode1 = nn.Sequential(nn.Linear(nsize,hidden1),
+                                    nn.ReLU())
+        self.encode2 = nn.Sequential(nn.Linear(hidden1,hidden2),
+                                    nn.ReLU())
+        self.encode3 = nn.Sequential(nn.Linear(hidden2,hidden3),
+                                    nn.ReLU())
+        self.decode1 = nn.Sequential(nn.Linear(hidden3,hidden2),
+                                    nn.ReLU())
+        self.decode2 = nn.Sequential(nn.Linear(hidden2,self.outdim),
+                                    nn.ReLU())
+        self.decode3 = nn.Linear(self.outdim,self.outdim)
+
+    def _serial_input_size(self, shape):
+        batch_size = 1
+        dummy_input = torch.autograd.Variable(torch.rand(batch_size, *shape))
+        dummy_flat = self.flatten(dummy_input)
+        nsize = dummy_flat.data.view(batch_size,-1).size(1)
+        return nsize
+
+
+    def forward(self,x):
+        flat = self.flatten(x)
+        enc = self.encode1(flat)
+        enc = self.encode2(enc)
+        enc = self.encode3(enc)
+        dec = self.decode1(enc)
+        dec = self.decode2(dec)
+        dec = self.decode3(dec)
+        out = dec.view(-1,*self.outshape)
+        return out
     
 class ConvAutoEncoder(nn.Module):
     def __init__(self, nb_states, nb_actions, window_len):
         super().__init__()
         self.flatten = nn.Flatten()
         self.conv1 = nn.Sequential(nn.Conv2d(1,16,kernel_size=3,stride=1,padding=1),
-                                    nn.ReLU(),
+                                    nn.LeakyReLU(),
                                     nn.MaxPool2d(2,2))
         self.conv2 = nn.Sequential(nn.Conv2d(16,4,kernel_size=3,stride=(2,1),padding=1),
-                                    nn.ReLU(),
+                                    nn.LeakyReLU(),
                                     nn.MaxPool2d(2,2))
         self.deconv1 = nn.Sequential(nn.ConvTranspose2d(4,16,kernel_size=(2,2),stride=(1,2),padding=(0,0)),
-                                    nn.ReLU())
+                                    nn.LeakyReLU())
         self.deconv2 = nn.Sequential(nn.ConvTranspose2d(16,1,kernel_size=(2,2),stride=(2,2),padding=(1,0)),
-                                    nn.Sigmoid())
+                                    nn.LeakyReLU())
         self.input_shape = (window_len,nb_states)
         
         self._print_encoded_shape()
@@ -236,13 +320,13 @@ class ConvAutoEncoder(nn.Module):
         batch_size = 1
         dummy_input = torch.autograd.Variable(torch.rand(batch_size, *self.input_shape))
         output_feat = self._encode_features(dummy_input)
-        print(output_feat.shape)
+        print('latent dimension:',output_feat.shape)
     
     def _print_decoded_shape(self):
         batch_size = 1
         dummy_input = torch.autograd.Variable(torch.rand(batch_size, *self.input_shape))
         output_feat = self.forward(dummy_input)
-        print(output_feat.shape)
+        print('decoded dimension:',output_feat.shape)
     
     def forward(self, x):
         # print(x.size())
@@ -255,52 +339,204 @@ class ConvAutoEncoder(nn.Module):
         
         
 from BeamManagementEnv import BeamManagementEnv
-from memory import SequentialMemory,BeamSpaceSequentialMemory
+from memory import SequentialMemory,BeamSpaceSequentialMemory,RingBuffer
 from torch.autograd import Variable
+from collections import deque
+from tqdm import tqdm
+import pickle
 
-FLOAT = torch.FloatTensor
-def to_tensor(ndarray, volatile=False, requires_grad=False, dtype=FLOAT):
-    return Variable(
-        torch.from_numpy(ndarray), volatile=volatile, requires_grad=requires_grad
-    ).type(dtype)
+# FLOAT = torch.FloatTensor
+# def to_tensor(ndarray, volatile=False, requires_grad=False, dtype=FLOAT):
+#     return Variable(
+#         torch.from_numpy(ndarray), volatile=volatile, requires_grad=requires_grad
+#     ).type(dtype)
 
+
+# if __name__ == "__main__":
+#     window_len = 4
+#     ue_speed = 15
+#     num_measurements = 16
+#     num_ob = int(1e6)
+#     q = deque(maxlen=window_len+1)
+#     env = BeamManagementEnv(ue_speed=ue_speed,num_beams_per_UE=64,num_measurements=num_measurements,min_traj_len = 10,full_observation=True)
+#     nb_actions = env.action_space.shape[0]
+#     nb_states = env.observation_space.shape[0]
+#     a_t = np.ones((nb_actions))
+#     train_episode_idx = 0
+#     train_step_idx = 0
+#     train_loss = 0
+#     done = False  
+#     ob_idx = 0
+#     ob_t = env.reset()
+#     q.append(ob_t)
+#     x = []
+#     y = []
+#     pbar = tqdm(total=num_ob)
+#     while ob_idx < num_ob:
+#         ob_t_1, r_t, done, info = env.step(a_t)
+#         q.append(ob_t_1)
+#         if len(q) == q.maxlen:
+#             x.append(np.array(q)[0:-1,:,:].reshape(window_len*num_measurements,-1))
+#             y.append(np.array(q[-1]))
+#             ob_idx += 1
+#             pbar.update(1)
+#         if done:
+#             ob_t = env.reset()
+#             q.clear()
+#             q.append(ob_t)
+#     x = np.array(x)
+#     y = np.array(y)
+#     print(x.shape,y.shape)
+#     np.save('x',x)
+#     np.save('y',y)
+#     pbar.close()
+
+
+# from torchvision import datasets
+# from torchvision import transforms
+from torch.utils.data.sampler import SubsetRandomSampler
+
+class CustomDataset():
+    def __init__(self, xfname, yfname, maxlen):
+        self.x = np.load(xfname)
+        self.y = np.load(yfname)
+        if len(self.y) > maxlen:
+            self.x = self.x[0:maxlen]
+            self.y = self.y[0:maxlen]
+
+    def __getitem__(self, index):
+        # This method should return only 1 sample and label 
+        # (according to "index"), not the whole dataset
+        # So probably something like this for you:
+        return self.x[index,:,:], self.y[index,:]
+
+    def __len__(self):
+        return len(self.y)
+    
 if __name__ == "__main__":
-    window_len = 4
+    window_len = 1
     ue_speed = 15
-    num_measurements = 16
-    train_iter = int(1e5)
-    warm_up = 100
-    batch_size = 32
-    memory = BeamSpaceSequentialMemory(limit=600000, window_length=window_len, num_measurements=num_measurements)
-    env = BeamManagementEnv(ue_speed=ue_speed,num_beams_per_UE=64,num_measurements=num_measurements,min_traj_len = 10)
-    ob_t = env.reset()
-    nb_actions = env.action_space.shape[0]
-    nb_states = env.observation_space.shape[0]
-    model = ConvAutoEncoder(nb_states=nb_states,nb_actions=nb_actions,window_len=window_len*num_measurements)
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    a_t = np.ones((nb_actions))
-    train_episode_idx = 0
-    train_step_idx = 0
-    train_loss = 0
-    done = False
-    while train_episode_idx < train_iter:
-        ob_t_1, r_t, done, info = env.step(a_t)
-        memory.append(ob_t,a_t,r_t,done)
-        ob_t = ob_t_1
-        if train_step_idx > warm_up:
-            state_batch, action_batch, reward_batch, next_state_batch, terminal_batch = memory.sample_and_split(batch_size)
-            predicted_next_state_batch = model(to_tensor(state_batch))
-            loss = criterion(predicted_next_state_batch, to_tensor(next_state_batch))
-            loss.backward()
+    num_measurements = 8
+    num_sample = int(1e5)
+    num_epochs = int(1e5)
+    # model = ConvAutoEncoder(64,64,window_len*num_measurements).double()
+    model = MLP(64,window_len,num_measurements).double()
+    model.cuda()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    criterion = torch.nn.MSELoss()
+    # dataset = CustomDataset('x.npy','y.npy',num_sample)
+    dataset = pickle.load(open('dataset.pkl','rb'))
+    batch_size = 128
+    validation_split = 0.2
+    shuffle_dataset = True
+    random_seed = 42
+    dataset_size = len(dataset)
+    indices = list(range(dataset_size))
+    split = int(np.floor(validation_split*dataset_size))
+    if shuffle_dataset:
+        np.random.seed(random_seed)
+        np.random.shuffle(indices)
+    train_indices, val_indices = indices[split:], indices[:split]
+    
+    train_sampler = SubsetRandomSampler(train_indices)
+    valid_sampler = SubsetRandomSampler(val_indices)
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
+    validation_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=valid_sampler)    
+    
+    for epoch in range(num_epochs):
+        avg_loss = 0
+        for batch_index, (x, y) in enumerate(train_loader):
+            x = x.to('cuda', non_blocking=True)
+            y = y.to('cuda', non_blocking=True)
+            predicted_y = model(x)
+            batch_loss = criterion(predicted_y,y)
+            optimizer.zero_grad()
+            batch_loss.backward()
             optimizer.step()
-            train_loss += loss.item()
-        if done:
-            train_episode_idx += 1
-            if train_step_idx > warm_up:print('Epoch: {} \tTraining Loss: {:.6f}'.format(train_episode_idx, train_loss))
-            train_loss = 0
-            ob_t = env.reset()
-        train_step_idx += 1
+            avg_loss += batch_loss.item()
+        # if epoch % 10 == 0: print('Epoch:{} Training Loss:{}'.format(epoch,avg_loss/(len(train_loader))))
+        # if epoch % 10 == 0:
+        #     avg_val_loss = 0
+        #     for batch_index, (x, y) in enumerate(validation_loader):
+        #         x = x.to('cuda', non_blocking=True)
+        #         y = y.to('cuda', non_blocking=True)
+        #         predicted_y = model(x)
+        #         batch_loss = criterion(predicted_y,y)
+        #         avg_val_loss += batch_loss.item()
+        #     print('Epoch:{} Validation Loss:{}'.format(epoch,avg_val_loss/len(validation_loader)))
+        if epoch % 10 == 0:
+            avg_val_loss = 0
+            for batch_index, (x, y) in enumerate(validation_loader):
+                x = x.to('cuda', non_blocking=True)
+                y = y.to('cuda', non_blocking=True)
+                predicted_y = model(x)
+                batch_loss = criterion(predicted_y,y)
+                avg_val_loss += batch_loss.item()
+            print('Epoch:{}, Training Loss:{}, Validation Loss:{}'.format(epoch,avg_loss/len(train_loader),avg_val_loss/len(validation_loader)))    
+
+
+    
+    
+    # for train_idx in range(train_iter):
+        
+    # pbar = tqdm(total=num_ob)
+    # while ob_idx < num_ob:
+    #     ob_t_1, r_t, done, info = env.step(a_t)
+    #     q.append(ob_t_1)
+    #     if len(q) == q.maxlen:
+    #         x.append(np.array(q)[0:-1,:,:].reshape(window_len*num_measurements,-1))
+    #         y.append(np.array(q[-1]))
+    #         ob_idx += 1
+    #         pbar.update(1)
+    #     if done:
+    #         ob_t = env.reset()
+    #         q.clear()
+    #         q.append(ob_t)
+    # x = np.array(x)
+    # y = np.array(y)
+    # print(x.shape,y.shape)
+    # np.save('x',x)
+    # np.save('y',y)
+    # pbar.close()    
+    
+# if __name__ == "__main__":
+#     window_len = 4
+#     ue_speed = 15
+#     num_measurements = 16
+#     train_iter = int(1e5)
+#     warm_up = 100
+#     batch_size = 32
+#     ringbuffer = RingBuffer(maxlen = window_len)
+#     memory = BeamSpaceSequentialMemory(limit=600000, window_length=window_len, num_measurements=num_measurements)
+#     env = BeamManagementEnv(ue_speed=ue_speed,num_beams_per_UE=64,num_measurements=num_measurements,min_traj_len = 10)
+#     ob_t = env.reset()
+#     nb_actions = env.action_space.shape[0]
+#     nb_states = env.observation_space.shape[0]
+#     model = ConvAutoEncoder(nb_states=nb_states,nb_actions=nb_actions,window_len=window_len*num_measurements)
+#     criterion = nn.MSELoss()
+#     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+#     a_t = np.ones((nb_actions))
+#     train_episode_idx = 0
+#     train_step_idx = 0
+#     train_loss = 0
+#     done = False
+#     while train_episode_idx < train_iter:
+#         ob_t_1, r_t, done, info = env.step(a_t)
+#         memory.append(ob_t,a_t,r_t,done)
+#         ob_t = ob_t_1
+#         if train_step_idx > warm_up:
+#             state_batch, action_batch, reward_batch, next_state_batch, terminal_batch = memory.sample_and_split(batch_size)
+#             predicted_next_state_batch = model(to_tensor(state_batch))
+#             loss = criterion(predicted_next_state_batch, to_tensor(next_state_batch))
+#             loss.backward()
+#             optimizer.step()
+#             train_loss += loss.item()
+#         if done:
+#             train_episode_idx += 1
+#             if train_step_idx > warm_up:print('Epoch: {} \tTraining Loss: {:.6f}'.format(train_episode_idx, train_loss))
+#             train_loss = 0
+#             ob_t = env.reset()
+#         train_step_idx += 1
 
         
  
