@@ -182,6 +182,29 @@ class multiwindow_DDPG(object):
     # def reset(self, obs):
     #     self.ob_t = obs
     #     self.random_process.reset_states()
+    
+    def pick_beams(self, observation):
+        #observation is num_measurements x num_beams matrix, iteratively pick best beam
+        selected_beams = np.argsort(np.sum(observation,axis=0))[-self.num_beams_per_UE:]
+        binary_beams = np.zeros(self.num_beams_per_UE)
+        binary_beams[selected_beams] = 1
+        
+        # selected_beams = []
+        # pool = list(np.arange(self.nb_actions))
+        # sum_tp = np.sum(observation,axis=0)
+        # sel_beam = np.argmax(sum_tp)
+        # selected_beams.append(sel_beam)
+        # pool.remove(sel_beam)
+        
+        # for it_idx in range(self.num_beams_per_UE):
+        #     sum_tp = np.sum(observation[pool,:],axis=0)
+        #     sel_beam = np.argmax(sum_tp)
+        #     selected_beams.append(sel_beam)
+        #     pool.remove(sel_beam)
+            
+        return binary_beams
+            
+        
      
     # modified reset() function that also takes in initial beam config
     def reset(self, obs):

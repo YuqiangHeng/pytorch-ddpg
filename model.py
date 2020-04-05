@@ -223,8 +223,8 @@ class MLP(nn.Module):
                                     nn.ReLU())
         self.fc3 = nn.Sequential(nn.Linear(hidden2,hidden2),
                                     nn.ReLU())
-        self.fc4 = nn.Sequential(nn.Linear(hidden2,hidden2),
-                                    nn.ReLU())
+        # self.fc4 = nn.Sequential(nn.Linear(hidden2,hidden2),
+        #                             nn.ReLU())
         self.fc5 = nn.Sequential(nn.Linear(hidden2,self.outdim),
                                     nn.ReLU())
         self.fc6 = nn.Linear(self.outdim,self.outdim)
@@ -242,7 +242,7 @@ class MLP(nn.Module):
         out = self.fc1(flat)
         out = self.fc2(out)
         out = self.fc3(out)
-        out = self.fc4(out)
+        # out = self.fc4(out)
         out = self.fc5(out)
         out = self.fc6(out)
         out = out.view(-1,*self.outshape)
@@ -414,9 +414,9 @@ class CustomDataset():
         return len(self.y)
     
 if __name__ == "__main__":
-    window_len = 1
+    window_len = 4
     ue_speed = 15
-    num_measurements = 8
+    num_measurements = 16
     num_sample = int(1e5)
     num_epochs = int(1e5)
     # model = ConvAutoEncoder(64,64,window_len*num_measurements).double()
