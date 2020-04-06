@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 
-from model import (Actor, Critic)
+from model import (Actor, Critic,MLP,SerializedCritic)
 from memory import SequentialMemory,BeamSpaceSequentialMemory
 from random_process import OrnsteinUhlenbeckProcess
 from util import *
@@ -13,6 +13,7 @@ from util import *
 # from ipdb import set_trace as debug
 
 criterion = nn.MSELoss()
+
 
 class Autoencoder_DDPG(object):
     def __init__(self, nb_states, nb_actions, args):
@@ -41,12 +42,11 @@ class Autoencoder_DDPG(object):
         # self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
         # self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
         
-        self.actor = Actor(self.nb_states, self.nb_actions, **net_cfg)
-        self.actor_target = Actor(self.nb_states, self.nb_actions, **net_cfg)
+        self.actor = MLP(self.nb_states, args.window_length, args.num_measurements)
+        self.actor_target = MLP(self.nb_states, args.window_length, args.num_measurements)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
-
-        self.critic = Critic(self.nb_states, self.nb_actions, **net_cfg)
-        self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
+        self.critic = SerializedCritic(self.nb_states, self.nb_actions, args.window_length, args.num_measurements)
+        self.critic_target = SerializedCritic(self.nb_states, self.nb_actions, args.window_length, args.num_measurements)
         self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
 
         hard_update(self.actor_target, self.actor) # Make sure target is with the same weight
@@ -78,10 +78,10 @@ class Autoencoder_DDPG(object):
         next_state_batch, terminal_batch = self.memory.sample_and_split(self.batch_size)
 
         # Prepare for the target q batch
-        states = to_tensor(next_state_batch, volatile=True)
-        actor_output = self.actor_target(to_tensor(next_state_batch, volatile=True))
-        actions = to_tensor(self.pick_beams_batch(to_numpy(actor_output)))
-        next_q_values = self.critic_target([states,actions,])
+        next_states = to_tensor(next_state_batch, volatile=True)
+        next_actor_outputs = self.actor_target(to_tensor(next_state_batch, volatile=True))
+        next_actions = to_tensor(self.pick_beams_batch(to_numpy(next_actor_outputs)))
+        next_q_values = self.critic_target([next_states,next_actions])
         next_q_values.volatile=False
 
         target_q_batch = to_tensor(reward_batch) + \
@@ -93,16 +93,17 @@ class Autoencoder_DDPG(object):
         q_batch = self.critic([ to_tensor(state_batch), to_tensor(action_batch) ])
         
         value_loss = criterion(q_batch, target_q_batch)
+        # print(value_loss.item())
         value_loss.backward()
         self.critic_optim.step()
 
         # Actor update
         self.actor.zero_grad()
 
-        policy_loss = -self.critic([
-            to_tensor(state_batch),
-            self.actor(to_tensor(state_batch))
-        ])
+        states = to_tensor(state_batch)
+        actor_outputs = self.actor(states)
+        actions = to_tensor(self.pick_beams_batch(to_numpy(actor_outputs)))
+        policy_loss = -self.critic([states,actions])
 
         policy_loss = policy_loss.mean()
         policy_loss.backward()
@@ -171,15 +172,13 @@ class Autoencoder_DDPG(object):
         # action = to_numpy(
         #     self.actor(to_tensor(np.array([s_t])))
         # ).squeeze(0)
-        action = np.clip(action, -1., 1.)
+        # action = np.clip(action, -1., 1.)
 
         if decay_epsilon:
             self.epsilon -= self.depsilon
             
-        binary_action = np.zeros(self.nb_actions)
-        binary_action[np.argsort(action)[-self.num_beams_per_UE:]] = 1
-        self.a_t = binary_action
-        return binary_action
+        self.a_t = action
+        return action
     
     def pick_beams(self, observation:np.ndarray):
         #observation is batchsize x num_measurements x num_beams matrix, iteratively pick best beam

@@ -10,6 +10,7 @@ from normalized_env import NormalizedEnv
 from evaluator import Evaluator
 from ddpg import DDPG
 from multiwindow_DDPG import multiwindow_DDPG
+from Autoencoder_DDPG import Autoencoder_DDPG
 from util import *
 from BeamManagementEnv import BeamManagementEnv
 import matplotlib.pyplot as plt
@@ -141,14 +142,14 @@ if __name__ == "__main__":
     parser.add_argument('--hidden2', default=300, type=int, help='hidden num of second fully connect layer')
     parser.add_argument('--rate', default=0.001, type=float, help='learning rate')
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
-    parser.add_argument('--warmup', default=0, type=int, help='time without training but only filling the replay memory')
-    parser.add_argument('--discount', default=0.99, type=float, help='')
+    parser.add_argument('--warmup', default=1000, type=int, help='time without training but only filling the replay memory')
+    parser.add_argument('--discount', default=0.9, type=float, help='')
     parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
-    parser.add_argument('--ou_sigma', default=0.2, type=float, help='noise sigma') 
+    parser.add_argument('--ou_sigma', default=2, type=float, help='noise sigma') 
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
     parser.add_argument('--validate_episodes', default=20, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
@@ -162,21 +163,21 @@ if __name__ == "__main__":
     
     parser.add_argument('--window_length', default=5, type=int, help='')
     parser.add_argument('--combine_state', default= False)
-    parser.add_argument('--num_measurements', default=5,type=int)
+    parser.add_argument('--num_measurements', default=8,type=int)
     # parser.add_argument('--l2norm', default=0.01, type=float, help='l2 weight decay') # TODO
     # parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
     parser.add_argument('--num_beams_per_UE',default=8,type=int)
     parser.add_argument('--enable_baseline',default=True)
     parser.add_argument('--enable_genie',default=True)
-    parser.add_argument('--ue_speed',default=10)
+    parser.add_argument('--ue_speed',default=15)
     parser.add_argument('--full_observation', default=False)
     parser.add_argument('--conv2d_1_kernel_size',type=int,default=5)
     parser.add_argument('--conv2d_2_kernel_size',type=int,default=3)
     parser.add_argument('--oversampling_factor',type=int,default=1)
-    parser.add_argument('--num_antennas',type=int,default=8)
+    parser.add_argument('--num_antennas',type=int,default=64)
     parser.add_argument('--use_saved_traj_in_validation',default=True)
     
-    parser.add_argument('--debug', default = False, dest='debug')
+    parser.add_argument('--debug', default = True, dest='debug')
 
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)
@@ -205,7 +206,8 @@ if __name__ == "__main__":
 
 
     # agent = DDPG(nb_states, nb_actions, window_len, args)
-    agent = multiwindow_DDPG(nb_states, nb_actions, args)
+    # agent = multiwindow_DDPG(nb_states, nb_actions, args)
+    agent = Autoencoder_DDPG(nb_states, nb_actions, args)
     evaluate = Evaluator(num_episodes = args.validate_episodes, 
                          interval = args.validate_steps, 
                          save_path = args.output, 
@@ -215,7 +217,7 @@ if __name__ == "__main__":
     
     if args.mode == 'train':
         tic = time.time()
-        rewards = train(args.train_iter, agent, env, evaluate, 
+        rewards = train(args.train_iter, agent, env, None, 
             args.validate_steps, args.output, max_episode_length=args.max_episode_length, debug=args.debug)
         toc = time.time()
         print('Training time for {} steps = {} seconds'.format(args.train_iter, toc-tic))

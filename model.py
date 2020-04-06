@@ -205,6 +205,71 @@ class Critic(nn.Module):
         out = self.fc_combined_3(out)
         out = self.tanh(out)
         return out    
+
+class SerializedCritic(nn.Module):
+    def __init__(self, nb_states, nb_actions, window_len, num_measurements):
+        super().__init__()
+        self.flatten = nn.Flatten()
+        self.state_input_shape = (window_len*num_measurements, nb_states)
+        s_nsize = self._serial_input_size(self.state_input_shape)
+        # s_hidden1 = int(s_nsize/2)
+        # s_hidden2 = int(s_nsize/4)
+        # s_hidden3 = int(s_nsize/8)
+        # self.action_input_shape = (nb_actions)
+        # a_nsize = self._serial_input_size(self.action_input_shape)
+        self.action_input_shape = nb_actions
+        a_nsize = nb_actions
+        # a_hidden1 = int(a_nsize/2)
+        # a_hidden2 = int(a_nsize/4)
+        # a_hidden3 = int(a_nsize/8)
+        
+        comb_input_size = s_nsize + a_nsize
+        comb_hidden1 = int(comb_input_size/2)
+        comb_hidden2 = int(comb_input_size/4)
+        comb_hidden3 = int(comb_input_size/8)
+        comb_hidden4 = int(comb_input_size/16)
+        
+        # self.s_fc1 = nn.Sequential(nn.Linear(s_nsize,s_hidden1),
+        #                             nn.ReLU())
+        # self.s_fc2 = nn.Sequential(nn.Linear(s_hidden1,s_hidden2),
+        #                             nn.ReLU())
+        # self.s_fc3 = nn.Sequential(nn.Linear(s_hidden2,s_hidden2),
+        #                             nn.ReLU())        
+        # self.a_fc1 = nn.Sequential(nn.Linear(a_nsize,a_hidden1),
+        #                             nn.ReLU())
+        # self.a_fc2 = nn.Sequential(nn.Linear(a_hidden1,a_hidden2),
+        #                             nn.ReLU())        
+        # self.a_fc3 = nn.Sequential(nn.Linear(a_hidden2,a_hidden3),
+        #                             nn.ReLU())   
+        self.comb_fc1 = nn.Sequential(nn.Linear(comb_input_size,comb_hidden1),
+                                    nn.ReLU())   
+        self.comb_fc2 = nn.Sequential(nn.Linear(comb_hidden1,comb_hidden2),
+                                    nn.ReLU())   
+        self.comb_fc3 = nn.Sequential(nn.Linear(comb_hidden2,comb_hidden3),
+                                    nn.ReLU())   
+        self.comb_fc4 = nn.Sequential(nn.Linear(comb_hidden3,comb_hidden4),
+                                    nn.ReLU())   
+        self.comb_fc5 = nn.Linear(comb_hidden4,1)        
+        
+    def _serial_input_size(self, shape):
+        batch_size = 1
+        dummy_input = torch.autograd.Variable(torch.rand(batch_size, *shape))
+        dummy_flat = self.flatten(dummy_input)
+        nsize = dummy_flat.data.view(batch_size,-1).size(1)
+        return nsize
+    
+    def forward(self, xs):
+        s, a = xs
+        state_flattened = self.flatten(s)
+        action_flattened = self.flatten(a)
+        combined = torch.cat((state_flattened,action_flattened),1)
+        out = self.comb_fc1(combined)
+        out = self.comb_fc2(out)
+        out = self.comb_fc3(out)
+        out = self.comb_fc4(out)
+        out = self.comb_fc5(out)
+        return out    
+        
     
 class MLP(nn.Module):
     def __init__(self, nb_states, window_len, num_measurements):
@@ -413,66 +478,66 @@ class CustomDataset():
     def __len__(self):
         return len(self.y)
     
-if __name__ == "__main__":
-    window_len = 4
-    ue_speed = 15
-    num_measurements = 16
-    num_sample = int(1e5)
-    num_epochs = int(1e5)
-    # model = ConvAutoEncoder(64,64,window_len*num_measurements).double()
-    model = MLP(64,window_len,num_measurements).double()
-    model.cuda()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    criterion = torch.nn.MSELoss()
-    # dataset = CustomDataset('x.npy','y.npy',num_sample)
-    dataset = pickle.load(open('dataset.pkl','rb'))
-    batch_size = 128
-    validation_split = 0.2
-    shuffle_dataset = True
-    random_seed = 42
-    dataset_size = len(dataset)
-    indices = list(range(dataset_size))
-    split = int(np.floor(validation_split*dataset_size))
-    if shuffle_dataset:
-        np.random.seed(random_seed)
-        np.random.shuffle(indices)
-    train_indices, val_indices = indices[split:], indices[:split]
+# if __name__ == "__main__":
+#     window_len = 4
+#     ue_speed = 15
+#     num_measurements = 16
+#     num_sample = int(1e5)
+#     num_epochs = int(1e5)
+#     # model = ConvAutoEncoder(64,64,window_len*num_measurements).double()
+#     model = MLP(64,window_len,num_measurements).double()
+#     model.cuda()
+#     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+#     criterion = torch.nn.MSELoss()
+#     # dataset = CustomDataset('x.npy','y.npy',num_sample)
+#     dataset = pickle.load(open('dataset.pkl','rb'))
+#     batch_size = 128
+#     validation_split = 0.2
+#     shuffle_dataset = True
+#     random_seed = 42
+#     dataset_size = len(dataset)
+#     indices = list(range(dataset_size))
+#     split = int(np.floor(validation_split*dataset_size))
+#     if shuffle_dataset:
+#         np.random.seed(random_seed)
+#         np.random.shuffle(indices)
+#     train_indices, val_indices = indices[split:], indices[:split]
     
-    train_sampler = SubsetRandomSampler(train_indices)
-    valid_sampler = SubsetRandomSampler(val_indices)
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
-    validation_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=valid_sampler)    
+#     train_sampler = SubsetRandomSampler(train_indices)
+#     valid_sampler = SubsetRandomSampler(val_indices)
+#     train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
+#     validation_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=valid_sampler)    
     
-    for epoch in range(num_epochs):
-        avg_loss = 0
-        for batch_index, (x, y) in enumerate(train_loader):
-            x = x.to('cuda', non_blocking=True)
-            y = y.to('cuda', non_blocking=True)
-            predicted_y = model(x)
-            batch_loss = criterion(predicted_y,y)
-            optimizer.zero_grad()
-            batch_loss.backward()
-            optimizer.step()
-            avg_loss += batch_loss.item()
-        # if epoch % 10 == 0: print('Epoch:{} Training Loss:{}'.format(epoch,avg_loss/(len(train_loader))))
-        # if epoch % 10 == 0:
-        #     avg_val_loss = 0
-        #     for batch_index, (x, y) in enumerate(validation_loader):
-        #         x = x.to('cuda', non_blocking=True)
-        #         y = y.to('cuda', non_blocking=True)
-        #         predicted_y = model(x)
-        #         batch_loss = criterion(predicted_y,y)
-        #         avg_val_loss += batch_loss.item()
-        #     print('Epoch:{} Validation Loss:{}'.format(epoch,avg_val_loss/len(validation_loader)))
-        if epoch % 10 == 0:
-            avg_val_loss = 0
-            for batch_index, (x, y) in enumerate(validation_loader):
-                x = x.to('cuda', non_blocking=True)
-                y = y.to('cuda', non_blocking=True)
-                predicted_y = model(x)
-                batch_loss = criterion(predicted_y,y)
-                avg_val_loss += batch_loss.item()
-            print('Epoch:{}, Training Loss:{}, Validation Loss:{}'.format(epoch,avg_loss/len(train_loader),avg_val_loss/len(validation_loader)))    
+#     for epoch in range(num_epochs):
+#         avg_loss = 0
+#         for batch_index, (x, y) in enumerate(train_loader):
+#             x = x.to('cuda', non_blocking=True)
+#             y = y.to('cuda', non_blocking=True)
+#             predicted_y = model(x)
+#             batch_loss = criterion(predicted_y,y)
+#             optimizer.zero_grad()
+#             batch_loss.backward()
+#             optimizer.step()
+#             avg_loss += batch_loss.item()
+#         # if epoch % 10 == 0: print('Epoch:{} Training Loss:{}'.format(epoch,avg_loss/(len(train_loader))))
+#         # if epoch % 10 == 0:
+#         #     avg_val_loss = 0
+#         #     for batch_index, (x, y) in enumerate(validation_loader):
+#         #         x = x.to('cuda', non_blocking=True)
+#         #         y = y.to('cuda', non_blocking=True)
+#         #         predicted_y = model(x)
+#         #         batch_loss = criterion(predicted_y,y)
+#         #         avg_val_loss += batch_loss.item()
+#         #     print('Epoch:{} Validation Loss:{}'.format(epoch,avg_val_loss/len(validation_loader)))
+#         if epoch % 10 == 0:
+#             avg_val_loss = 0
+#             for batch_index, (x, y) in enumerate(validation_loader):
+#                 x = x.to('cuda', non_blocking=True)
+#                 y = y.to('cuda', non_blocking=True)
+#                 predicted_y = model(x)
+#                 batch_loss = criterion(predicted_y,y)
+#                 avg_val_loss += batch_loss.item()
+#             print('Epoch:{}, Training Loss:{}, Validation Loss:{}'.format(epoch,avg_loss/len(train_loader),avg_val_loss/len(validation_loader)))    
 
 
     
