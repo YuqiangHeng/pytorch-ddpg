@@ -24,6 +24,8 @@ class Autoencoder_DDPG(object):
         self.nb_states = nb_states
         self.nb_actions= nb_actions
         self.num_beams_per_UE = args.num_beams_per_UE
+        self.num_measurements = args.num_measurements
+        self.window_length = args.window_length
 #        self.combine_state = args.combine_state        
         # Create Actor and Critic Network
         net_cfg = {
@@ -42,11 +44,11 @@ class Autoencoder_DDPG(object):
         # self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
         # self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
         
-        self.actor = MLP(self.nb_states, args.window_length, args.num_measurements)
-        self.actor_target = MLP(self.nb_states, args.window_length, args.num_measurements)
+        self.actor = MLP(self.nb_states, self.window_length, self.num_measurements)
+        self.actor_target = MLP(self.nb_states, self.window_length, self.num_measurements)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
-        self.critic = SerializedCritic(self.nb_states, self.nb_actions, args.window_length, args.num_measurements)
-        self.critic_target = SerializedCritic(self.nb_states, self.nb_actions, args.window_length, args.num_measurements)
+        self.critic = SerializedCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements)
+        self.critic_target = SerializedCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements)
         self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
 
         hard_update(self.actor_target, self.actor) # Make sure target is with the same weight
@@ -54,8 +56,8 @@ class Autoencoder_DDPG(object):
         
         #Create replay buffer
         # self.memory = SequentialMemory(limit=args.rmsize, window_length=args.window_length)
-        self.memory = BeamSpaceSequentialMemory(limit=args.rmsize, window_length=args.window_length, num_measurements=args.num_measurements)
-        self.random_process = OrnsteinUhlenbeckProcess(size=(args.num_measurements,nb_states), theta=args.ou_theta, mu=args.ou_mu, sigma=args.ou_sigma)
+        self.memory = BeamSpaceSequentialMemory(limit=args.rmsize, window_length=self.window_length, num_measurements=self.num_measurements)
+        self.random_process = OrnsteinUhlenbeckProcess(size=(self.num_measurements,self.nb_states), theta=args.ou_theta, mu=args.ou_mu, sigma=args.ou_sigma)
 
         # Hyper-parameters
         self.batch_size = args.bsize
@@ -78,9 +80,16 @@ class Autoencoder_DDPG(object):
         next_state_batch, terminal_batch = self.memory.sample_and_split(self.batch_size)
 
         # Prepare for the target q batch
-        next_states = to_tensor(next_state_batch, volatile=True)
-        next_actor_outputs = self.actor_target(to_tensor(next_state_batch, volatile=True))
-        next_actions = to_tensor(self.pick_beams_batch(to_numpy(next_actor_outputs)))
+        with torch.no_grad():
+            next_states = to_tensor(next_state_batch)
+        predicted_beam_qual = self.actor_target(to_tensor(state_batch))
+        broadcasted_action_batch = np.expand_dims(action_batch, axis=1)
+        broadcasted_action_batch = np.repeat(broadcasted_action_batch, self.num_measurements, dim=1)
+        predicted_beam_qual_masked = torch.mul(predicted_beam_qual, to_tensor(action_batch))
+        true_beam_qual = to_tensor(next_state_batch[:,-self.num_measurements:,:])
+        beam_qual_prediction_loss = criterion(predicted_beam_qual_masked,true_beam_qual)
+        
+        next_actions = to_tensor(self.pick_beams_batch(to_numpy(predicted_beam_qual)))
         next_q_values = self.critic_target([next_states,next_actions])
         next_q_values.volatile=False
 
