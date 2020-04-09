@@ -142,11 +142,11 @@ if __name__ == "__main__":
     parser.add_argument('--hidden2', default=300, type=int, help='hidden num of second fully connect layer')
     parser.add_argument('--rate', default=0.001, type=float, help='learning rate')
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
-    parser.add_argument('--warmup', default=1000, type=int, help='time without training but only filling the replay memory')
+    parser.add_argument('--warmup', default=100, type=int, help='time without training but only filling the replay memory')
     parser.add_argument('--discount', default=0.9, type=float, help='')
     parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
-    parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
+    parser.add_argument('--rmsize', default=6000, type=int, help='memory size')
     parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=2, type=float, help='noise sigma') 
@@ -175,7 +175,8 @@ if __name__ == "__main__":
     parser.add_argument('--conv2d_2_kernel_size',type=int,default=3)
     parser.add_argument('--oversampling_factor',type=int,default=1)
     parser.add_argument('--num_antennas',type=int,default=64)
-    parser.add_argument('--use_saved_traj_in_validation',default=True)
+    parser.add_argument('--use_saved_traj_in_validation',default=False)
+    parser.add_argument('--actor_lambda',type=float,default=0.5)
     
     parser.add_argument('--debug', default = True, dest='debug')
 

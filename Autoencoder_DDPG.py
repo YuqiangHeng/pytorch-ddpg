@@ -70,6 +70,9 @@ class Autoencoder_DDPG(object):
         self.ob_t = None # Most recent observation
         self.a_t = None # Most recent action
         self.is_training = True
+        self.debug = args.debug
+        self.actor_lambda = args.actor_lambda
+        self.policy_update_counter = 0
 
         # 
         if USE_CUDA: self.cuda()
@@ -82,25 +85,17 @@ class Autoencoder_DDPG(object):
         # Prepare for the target q batch
         with torch.no_grad():
             next_states = to_tensor(next_state_batch)
-        predicted_beam_qual = self.actor_target(to_tensor(state_batch))
-        broadcasted_action_batch = np.expand_dims(action_batch, axis=1)
-        broadcasted_action_batch = np.repeat(broadcasted_action_batch, self.num_measurements, dim=1)
-        predicted_beam_qual_masked = torch.mul(predicted_beam_qual, to_tensor(action_batch))
-        true_beam_qual = to_tensor(next_state_batch[:,-self.num_measurements:,:])
-        beam_qual_prediction_loss = criterion(predicted_beam_qual_masked,true_beam_qual)
-        
-        next_actions = to_tensor(self.pick_beams_batch(to_numpy(predicted_beam_qual)))
-        next_q_values = self.critic_target([next_states,next_actions])
-        next_q_values.volatile=False
-
+            predicted_beam_qual_target = self.actor_target(next_states)        
+            next_actions = to_tensor(self.pick_beams_batch(to_numpy(predicted_beam_qual_target)))
+            next_q_values = self.critic_target([next_states,next_actions])
+        # next_q_values.volatile=False
+        next_q_values.requires_grad = True
         target_q_batch = to_tensor(reward_batch) + \
             self.discount*to_tensor(terminal_batch.astype(np.float))*next_q_values
 
         # Critic update
         self.critic.zero_grad()
-
         q_batch = self.critic([ to_tensor(state_batch), to_tensor(action_batch) ])
-        
         value_loss = criterion(q_batch, target_q_batch)
         # print(value_loss.item())
         value_loss.backward()
@@ -108,19 +103,30 @@ class Autoencoder_DDPG(object):
 
         # Actor update
         self.actor.zero_grad()
-
+        
+        # Beam qual prediction loss
         states = to_tensor(state_batch)
-        actor_outputs = self.actor(states)
-        actions = to_tensor(self.pick_beams_batch(to_numpy(actor_outputs)))
+        predicted_beam_qual = self.actor(states)
+        broadcasted_action_batch = np.expand_dims(action_batch, axis=1)
+        broadcasted_action_batch = np.repeat(broadcasted_action_batch, self.num_measurements, axis=1)
+        predicted_beam_qual_masked = torch.mul(predicted_beam_qual, to_tensor(broadcasted_action_batch))
+        true_beam_qual = to_tensor(next_state_batch[:,-self.num_measurements:,:])
+        beam_qual_prediction_loss = criterion(predicted_beam_qual_masked,true_beam_qual)        
+        
+        # Value loss
+        actions = to_tensor(self.pick_beams_batch(to_numpy(predicted_beam_qual)))
         policy_loss = -self.critic([states,actions])
-
         policy_loss = policy_loss.mean()
-        policy_loss.backward()
+        
+        total_loss = (1-self.actor_lambda)*policy_loss + self.actor_lambda * beam_qual_prediction_loss
+        total_loss.backward()
         self.actor_optim.step()
-
+        # if self.debug and self.policy_update_counter % 20 == 0:
+        #     print('Critic Loss: {}. Actor Prediction Loss: {}. Actor Policy Loss: {}'.format(value_loss.item(), beam_qual_prediction_loss.item(),policy_loss.item()))
         # Target update
         soft_update(self.actor_target, self.actor, self.tau)
         soft_update(self.critic_target, self.critic, self.tau)
+        self.policy_update_counter += 1
 
     def eval(self):
         self.actor.eval()
