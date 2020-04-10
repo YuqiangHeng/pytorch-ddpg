@@ -28,6 +28,8 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
     step = episode = episode_steps = 0
     episode_reward = 0.
     observation = None
+    if evaluate is not None:
+        eval_rewards = []
 
     while step < num_iterations:
         # reset if it is the start of episode
@@ -65,6 +67,7 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             toc = time.time()
             # if debug: prYellow('[Evaluate] Step_{:07d}: mean_reward:{}'.format(step, validate_reward))
             print('[Evaluate] Step_{:07d}: time:{} seconds, mean_reward:{}'.format(step, toc-tic, np.mean(validate_rewards['agent_rewards'])))
+            eval_rewards.append(np.mean(validate_rewards['agent_rewards']))
             plt.figure()
             sns.kdeplot(validate_rewards['agent_rewards'],label='agent')
             sns.kdeplot(validate_rewards['baseline_rewards'],label='baseline')
@@ -126,14 +129,22 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             episode_steps = 0
             episode_reward = 0.
             episode += 1
-    if env.enable_baseline and env.enable_genie:
-        return [agent_rewards, baseline_rewards, genie_rewards]
-    elif env.enable_baseline:
-        return [agent_rewards, baseline_rewards]
-    elif env.enable_genie:
-        return [agent_rewards, genie_rewards]
-    else:
-        return agent_rewards
+    all_results = {'agent_rewards':agent_rewards}
+    if evaluate is not None:
+        all_results['evalulation_rewards'] = eval_rewards
+    if env.enable_baseline:
+        all_results['baseline_rewards'] = baseline_rewards
+    if env.enable_genie:
+        all_results['genie_rewards'] = genie_rewards
+    # if env.enable_baseline and env.enable_genie:
+    #     return {'agent_rewards':agent_rewards, 'baseline_rewards':baseline_rewards, 'genie_rewards':genie_rewards}
+    # elif env.enable_baseline:
+    #     return {'agent_rewards':agent_rewards, 'baseline_rewards':baseline_rewards}
+    # elif env.enable_genie:
+    #     return {'agent_rewards':agent_rewards, 'genie_rewards':genie_rewards}
+    # else:
+    #     return {'agent_rewards':agent_rewards}
+    return all_results
 
 def test(num_episodes, agent, env, evaluate, model_path, visualize=True, debug=False):
 
@@ -173,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument('--validate_steps', default=500, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=20000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=100000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -243,42 +254,60 @@ if __name__ == "__main__":
             args.validate_steps, args.output, max_episode_length=args.max_episode_length, debug=args.debug)
         toc = time.time()
         print('Training time for {} steps = {} seconds'.format(args.train_iter, toc-tic))
-        if args.enable_baseline and args.enable_genie:
-            plt.figure()
-            sns.kdeplot(rewards[0],label='agent')
-            sns.kdeplot(rewards[1],label='baseline')
-            sns.kdeplot(rewards[2],label='genie')
-            plt.legend();
-            plt.figure()
-            plt.plot(rewards[0])
-            plt.xlabel('episodes')
-            plt.ylabel('avg episode reward')
-        elif args.enable_baseline:
-            plt.figure()
-            sns.kdeplot(rewards[0],label='agent')
-            sns.kdeplot(rewards[1],label='baseline')
-            plt.legend();
-            plt.figure()
-            plt.plot(rewards[0])
-            plt.xlabel('episodes')
-            plt.ylabel('avg episode reward')
-        elif args.enable_genie:
-            plt.figure()
-            sns.kdeplot(rewards[0],label='agent')
-            sns.kdeplot(rewards[2],label='genie')
-            plt.legend();
-            plt.figure()
-            plt.plot(rewards[0])
-            plt.xlabel('episodes')
-            plt.ylabel('avg episode reward')
-        else:
-            plt.figure()
-            sns.kdeplot(rewards,label='agent')
-            plt.legend();
-            plt.figure()
-            plt.plot(rewards)
-            plt.xlabel('episodes')
-            plt.ylabel('avg episode reward')
+        plt.figure()
+        sns.kdeplot(rewards['agent_rewards'],label='agent')
+        if args.enable_baseline:
+            sns.kdeplot(rewards['baseline_rewards'],label='baseline')
+        if args.enable_genie:
+            sns.kdeplot(rewards['genie_rewards'],label='genie')
+        plt.legend();
+        
+        plt.figure()
+        plt.plot(rewards['agent_rewards'])
+        plt.xlabel('episodes')
+        plt.ylabel('avg episode reward')
+        
+        plt.figure()
+        plt.plot(rewards['evalulation_rewards'])
+        plt.xlabel('episodes')
+        plt.ylabel('eval avg episode reward')
+        
+        # if args.enable_baseline and args.enable_genie:
+        #     plt.figure()
+        #     sns.kdeplot(rewards['agent_rewards'],label='agent')
+        #     sns.kdeplot(rewards['baseline_rewards'],label='baseline')
+        #     sns.kdeplot(rewards['genie_rewards'],label='genie')
+        #     plt.legend();
+        #     plt.figure()
+        #     plt.plot(rewards['agent_rewards'])
+        #     plt.xlabel('episodes')
+        #     plt.ylabel('avg episode reward')
+        # elif args.enable_baseline:
+        #     plt.figure()
+        #     sns.kdeplot(rewards['agent_rewards'],label='agent')
+        #     sns.kdeplot(rewards['baseline_rewards'],label='baseline')
+        #     plt.legend();
+        #     plt.figure()
+        #     plt.plot(rewards['agent_rewards'])
+        #     plt.xlabel('episodes')
+        #     plt.ylabel('avg episode reward')
+        # elif args.enable_genie:
+        #     plt.figure()
+        #     sns.kdeplot(rewards[0],label='agent')
+        #     sns.kdeplot(rewards[2],label='genie')
+        #     plt.legend();
+        #     plt.figure()
+        #     plt.plot(rewards[0])
+        #     plt.xlabel('episodes')
+        #     plt.ylabel('avg episode reward')
+        # else:
+        #     plt.figure()
+        #     sns.kdeplot(rewards,label='agent')
+        #     plt.legend();
+        #     plt.figure()
+        #     plt.plot(rewards)
+        #     plt.xlabel('episodes')
+        #     plt.ylabel('avg episode reward')
 
         
             
