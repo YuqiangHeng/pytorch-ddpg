@@ -7,14 +7,14 @@ import torch
 import gym
 
 from normalized_env import NormalizedEnv
-from evaluator import Evaluator
+from evaluator import Evaluator, BeamSelectionEvaluator, DDPGAgentEval
 from ddpg import DDPG
 from multiwindow_DDPG import multiwindow_DDPG
 from Autoencoder_DDPG import Autoencoder_DDPG
 from util import *
 from BeamManagementEnv import BeamManagementEnv
 import matplotlib.pyplot as plt
-
+import time
 # gym.undo_logger_setup()
     
 def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_episode_length=None, debug=False):
@@ -54,11 +54,27 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
         
         # [optional] evaluate
         if evaluate is not None and validate_steps > 0 and step % validate_steps == 0:
-            policy = lambda x: agent.select_action(x, decay_epsilon=False)
+            # policy = lambda x: agent.select_action(x, decay_epsilon=False)
+            tic = time.time()
+            evalagent = DDPGAgentEval(agent)
             val_env = deepcopy(env)
-            validate_reward = evaluate(val_env, policy, debug=False, visualize=False)
+            val_env.enable_baseline = True
+            val_env.enable_genie = True
+            val_env.reset()
+            validate_rewards = evaluate(val_env, evalagent, debug=False, visualize=False, save = False)
+            toc = time.time()
             # if debug: prYellow('[Evaluate] Step_{:07d}: mean_reward:{}'.format(step, validate_reward))
-            print('[Evaluate] Step_{:07d}: mean_reward:{}'.format(step, validate_reward))
+            print('[Evaluate] Step_{:07d}: time:{} seconds, mean_reward:{}'.format(step, toc-tic, np.mean(validate_rewards['agent_rewards'])))
+            plt.figure()
+            sns.kdeplot(validate_rewards['agent_rewards'],label='agent')
+            sns.kdeplot(validate_rewards['baseline_rewards'],label='baseline')
+            sns.kdeplot(validate_rewards['genie_rewards'],label='genie')
+            plt.legend();
+            # plt.figure()
+            # plt.plot(rewards[0])
+            # plt.xlabel('episodes')
+            # plt.ylabel('avg episode reward')
+            plt.title('Eval Results after #{} Training Steps'.format(step))
 
         # # [optional] save intermideate model
         # if step % int(num_iterations/100) == 0:
@@ -146,17 +162,17 @@ if __name__ == "__main__":
     parser.add_argument('--discount', default=0.9, type=float, help='')
     parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
-    parser.add_argument('--rmsize', default=6000, type=int, help='memory size')
+    parser.add_argument('--rmsize', default=60000, type=int, help='memory size')
     parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=2, type=float, help='noise sigma') 
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
-    parser.add_argument('--validate_episodes', default=20, type=int, help='how many episode to perform during validate experiment')
+    parser.add_argument('--validate_episodes', default=500, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
-    parser.add_argument('--validate_steps', default=2000, type=int, help='how many steps to perform a validate experiment')
+    parser.add_argument('--validate_steps', default=500, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=10000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=20000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -175,7 +191,7 @@ if __name__ == "__main__":
     parser.add_argument('--conv2d_2_kernel_size',type=int,default=3)
     parser.add_argument('--oversampling_factor',type=int,default=1)
     parser.add_argument('--num_antennas',type=int,default=64)
-    parser.add_argument('--use_saved_traj_in_validation',default=False)
+    parser.add_argument('--use_saved_traj_in_validation',default=True)
     parser.add_argument('--actor_lambda',type=float,default=0.5)
     
     parser.add_argument('--debug', default = True, dest='debug')
@@ -209,16 +225,20 @@ if __name__ == "__main__":
     # agent = DDPG(nb_states, nb_actions, window_len, args)
     # agent = multiwindow_DDPG(nb_states, nb_actions, args)
     agent = Autoencoder_DDPG(nb_states, nb_actions, args)
-    evaluate = Evaluator(num_episodes = args.validate_episodes, 
+    # evaluate = Evaluator(num_episodes = args.validate_episodes, 
+    #                      interval = args.validate_steps, 
+    #                      save_path = args.output, 
+    #                      max_episode_length=args.max_episode_length,
+    #                      use_saved_traj= args.use_saved_traj_in_validation)
+    evaluate = BeamSelectionEvaluator(num_episodes = args.validate_episodes, 
                          interval = args.validate_steps, 
                          save_path = args.output, 
                          max_episode_length=args.max_episode_length,
-                         use_saved_traj= args.use_saved_traj_in_validation)
-    
+                         use_saved_traj= args.use_saved_traj_in_validation)    
     
     if args.mode == 'train':
         tic = time.time()
-        rewards = train(args.train_iter, agent, env, None, 
+        rewards = train(args.train_iter, agent, env, evaluate, 
             args.validate_steps, args.output, max_episode_length=args.max_episode_length, debug=args.debug)
         toc = time.time()
         print('Training time for {} steps = {} seconds'.format(args.train_iter, toc-tic))
