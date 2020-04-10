@@ -75,6 +75,7 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             # plt.xlabel('episodes')
             # plt.ylabel('avg episode reward')
             plt.title('Eval Results after #{} Training Steps'.format(step))
+            plt.show()
 
         # # [optional] save intermideate model
         # if step % int(num_iterations/100) == 0:
