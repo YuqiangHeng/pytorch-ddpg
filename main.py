@@ -33,7 +33,6 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
     if evaluate is not None:
         eval_rewards = []
         
-    # pbar = tqdm(total=num_iterations)
     while step < num_iterations:
         # reset if it is the start of episode
         if observation is None:
@@ -88,7 +87,6 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
         #     agent.save_model(output)
 
         # update 
-        # pbar.update(1)
         step += 1
         episode_steps += 1
         episode_reward += reward
@@ -133,7 +131,6 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             episode_steps = 0
             episode_reward = 0.
             episode += 1
-    # pbar.close()  
     all_results = {'agent_rewards':agent_rewards}
     if evaluate is not None:
         all_results['evalulation_rewards'] = eval_rewards
@@ -185,11 +182,13 @@ if __name__ == "__main__":
     parser.add_argument('--ou_sigma', default=2, type=float, help='noise sigma') 
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
     parser.add_argument('--validate_episodes', default=250, type=int, help='how many episode to perform during validate experiment')
+    parser.add_argument('--validate_episodes', default=1000, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
     parser.add_argument('--validate_steps', default=1000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
     parser.add_argument('--train_iter', default=50000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=200000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -208,7 +207,7 @@ if __name__ == "__main__":
     parser.add_argument('--conv2d_2_kernel_size',type=int,default=3)
     parser.add_argument('--oversampling_factor',type=int,default=1)
     parser.add_argument('--num_antennas',type=int,default=64)
-    parser.add_argument('--use_saved_traj_in_validation',default=True)
+    parser.add_argument('--use_saved_traj_in_validation',default=False)
     parser.add_argument('--actor_lambda',type=float,default=0.5)
     
     parser.add_argument('--debug', default = False, dest='debug')
