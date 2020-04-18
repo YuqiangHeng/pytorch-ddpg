@@ -13,6 +13,9 @@ import numpy as np
 import gym
 from gym import spaces
 from gym.utils import seeding
+import itertools
+import time
+from tqdm import tqdm
 #import matplotlib.pyplot as plt
 #from Utils import alpha_shape
 
@@ -178,12 +181,14 @@ class BeamManagementEnv(gym.Env):
            ue_speed = 5,
            enable_baseline = False,
            enable_genie = False,
+           enable_exhaustive = False,
            combine_state = False,
            full_observation = False,
            num_measurements = 1,
            min_traj_len = 5):
         self.enable_baseline = enable_baseline
         self.enable_genie = enable_genie
+        self.enable_exhaustive = enable_exhaustive
         self.combine_state = combine_state #flag for whether to include previous action in state representation: s(t)=[ob(t),a(t-1)]
         self.full_observation = full_observation # flag for whether to measure all beams in observation
         self.num_measurements = num_measurements #number of measurements per timestep: if 1, 1 measurements collected at the end of the period. otherwise sample in equal partitions
@@ -291,102 +296,244 @@ class BeamManagementEnv(gym.Env):
         result = np.absolute(np.matmul(self.h[ue_pos,:], np.transpose(np.conj(self.codebook_all[beam_idc]))))**2
         return 30 + 10*np.log10(result)-(-94)
                 
+#     def step(self, action): #action is codebook_size x 1 mulit bineary vector indicting which beams are activated
+#         assert(len(np.nonzero(action)[0])==self.num_beams_per_UE)
+#         self.assigned_beams_per_UE = np.nonzero(action)[0]
+#         # self.assigned_beams_per_UE = np.argsort(action)[-self.num_beams_per_UE:]
+#         info = {}
+#         #get reward
+#         ue_traveled_dist_next = (self.t+1)*self.ue_speed
+#         episode_end = False
+#         if ue_traveled_dist_next >= max(self.traj_point_distances):
+#             ue_traveled_dist_next = max(self.traj_point_distances)
+#             episode_end = True
+#         total_segment_length = ue_traveled_dist_next - self.ue_traveled_distance
+#         idc_in_traj_covered = np.nonzero(np.logical_and(self.traj_point_distances > self.ue_traveled_distance, self.traj_point_distances < ue_traveled_dist_next))[0] #idc of points in traj in the segment
+# #        print(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])
+#         # if len(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0]) == 0:
+#         #     print('ohh')
+#         prev_h_idc_in_traj = min(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])-1
+#         h_idc_in_traj_covered = np.insert(idc_in_traj_covered,0,prev_h_idc_in_traj) #idc of h (local idc) in traj, including starting h (last point in prev segment)
+#         h_idc_covered = self.traj[h_idc_in_traj_covered] #global idc
+#         if len(h_idc_covered) == 1:
+#             # H doesnt change within the segment
+#             segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.assigned_beams_per_UE)
+#             reward = np.log2(1+10**(max(segment_bf_gains)/10))
+#         else:
+#             reward = 0
+#             for i in range(len(h_idc_covered)):
+#                 segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], self.assigned_beams_per_UE)
+#                 segment_achievable_rate = np.log2(1+10**(max(segment_bf_gains)/10))
+#                 if i == 0:
+#                     segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+#                     segment_start = self.ue_traveled_distance
+#                 if i == len(h_idc_covered)-1:
+#                     segment_end = ue_traveled_dist_next
+#                     segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+#                 if i > 0 and i < len(h_idc_covered)-1:
+#                     segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+#                     segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+#                 reward += segment_achievable_rate*(segment_end - segment_start)/total_segment_length  
+#         self.prev_info['agent_reward'] = reward
+#         self.reward_log['agent'].append(reward)
+
+#         if self.enable_baseline:
+#             if len(h_idc_covered) == 1:
+#                 # H doesnt change within the segment
+#                 baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.baseline_beams)
+#                 baseline_reward = np.log2(1+10**(max(baseline_segment_bf_gains)/10))
+#             else:
+#                 baseline_reward = 0
+#                 for i in range(len(h_idc_covered)):
+#                     baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], self.baseline_beams)
+#                     baseline_segment_achievable_rate = np.log2(1+10**(max(baseline_segment_bf_gains)/10))
+#                     if i == 0:
+#                         segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+#                         segment_start = self.ue_traveled_distance
+#                     if i == len(h_idc_covered)-1:
+#                         segment_end = ue_traveled_dist_next
+#                         segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+#                     if i > 0 and i < len(h_idc_covered)-1:
+#                         segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+#                         segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+#                     baseline_reward += baseline_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
+#             info['baseline_reward'] = baseline_reward
+#             self.prev_info['baseline_reward'] = baseline_reward
+#             self.reward_log['baseline'].append(baseline_reward)
+#             info['baseline_beams'] = self.baseline_beams
+        
+#         if self.enable_genie:
+#             info['genie_beams'] = []
+#             if len(h_idc_covered) == 1:
+#                 # H doesnt change within the segment
+#                 genie_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], np.arange(self.codebook_size))
+#                 genie_reward = np.log2(1+10**(max(genie_segment_bf_gains)/10))
+#                 genie_beam = np.argmax(genie_segment_bf_gains)
+#                 info['genie_beams'].append(genie_beam)
+#             else:
+#                 genie_reward = 0
+#                 for i in range(len(h_idc_covered)):
+#                     genie_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], np.arange(self.codebook_size))
+#                     genie_segment_achievable_rate = np.log2(1+10**(max(genie_segment_bf_gains)/10))
+#                     info['genie_beams'].append(np.argmax(genie_segment_bf_gains))
+#                     if i == 0:
+#                         segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+#                         segment_start = self.ue_traveled_distance
+#                     if i == len(h_idc_covered)-1:
+#                         segment_end = ue_traveled_dist_next
+#                         segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+#                     if i > 0 and i < len(h_idc_covered)-1:
+#                         segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+#                         segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+#                     genie_reward += genie_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
+#             info['genie_reward'] = genie_reward
+#             info['genie_beams'] = np.unique(info['genie_beams'])
+#             self.prev_info['genie_reward'] = genie_reward
+#             self.reward_log['genie'].append(genie_reward)
+
+#         if self.full_observation:
+#             observation = self._get_full_observation()
+#         else:
+#             observation = self._get_observation()            
+                     
+#         self._time_increment()
+#         # assigned_bf_gains = self.measure_beams_single_UE(self.current_h_idc, self.assigned_beams_per_UE)
+#         # beam_report = np.zeros((self.codebook_size))
+#         # beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
+        
+#         # update baseline beams (used in next time step) that's centered around the best beam in the last h in this segment
+#         if self.enable_baseline:
+#             baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
+#             self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
+        
+#         # if self.combine_state:
+#         #     observation = np.concatenate((beam_report,action),axis=0)
+#         # else:
+#         #     observation = beam_report
+        
+#         return observation, reward, episode_end, info
+
     def step(self, action): #action is codebook_size x 1 mulit bineary vector indicting which beams are activated
         assert(len(np.nonzero(action)[0])==self.num_beams_per_UE)
         self.assigned_beams_per_UE = np.nonzero(action)[0]
         # self.assigned_beams_per_UE = np.argsort(action)[-self.num_beams_per_UE:]
         info = {}
         #get reward
-        ue_traveled_dist_next = (self.t+1)*self.ue_speed
+        self.ue_traveled_dist_next = (self.t+1)*self.ue_speed
         episode_end = False
-        if ue_traveled_dist_next >= max(self.traj_point_distances):
-            ue_traveled_dist_next = max(self.traj_point_distances)
+        if self.ue_traveled_dist_next >= max(self.traj_point_distances):
+            self.ue_traveled_dist_next = max(self.traj_point_distances)
             episode_end = True
-        total_segment_length = ue_traveled_dist_next - self.ue_traveled_distance
-        idc_in_traj_covered = np.nonzero(np.logical_and(self.traj_point_distances > self.ue_traveled_distance, self.traj_point_distances < ue_traveled_dist_next))[0] #idc of points in traj in the segment
+        self.total_segment_length = self.ue_traveled_dist_next - self.ue_traveled_distance
+        idc_in_traj_covered = np.nonzero(np.logical_and(self.traj_point_distances > self.ue_traveled_distance, self.traj_point_distances < self.ue_traveled_dist_next))[0] #idc of points in traj in the segment
 #        print(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])
         # if len(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0]) == 0:
         #     print('ohh')
         prev_h_idc_in_traj = min(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])-1
-        h_idc_in_traj_covered = np.insert(idc_in_traj_covered,0,prev_h_idc_in_traj) #idc of h (local idc) in traj, including starting h (last point in prev segment)
-        h_idc_covered = self.traj[h_idc_in_traj_covered] #global idc
-        if len(h_idc_covered) == 1:
-            # H doesnt change within the segment
-            segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.assigned_beams_per_UE)
-            reward = np.log2(1+10**(max(segment_bf_gains)/10))
-        else:
-            reward = 0
-            for i in range(len(h_idc_covered)):
-                segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], self.assigned_beams_per_UE)
-                segment_achievable_rate = np.log2(1+10**(max(segment_bf_gains)/10))
-                if i == 0:
-                    segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                    segment_start = self.ue_traveled_distance
-                if i == len(h_idc_covered)-1:
-                    segment_end = ue_traveled_dist_next
-                    segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                if i > 0 and i < len(h_idc_covered)-1:
-                    segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                    segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                reward += segment_achievable_rate*(segment_end - segment_start)/total_segment_length  
+        self.h_idc_in_traj_covered = np.insert(idc_in_traj_covered,0,prev_h_idc_in_traj) #idc of h (local idc) in traj, including starting h (last point in prev segment)
+        self.h_idc_covered = self.traj[self.h_idc_in_traj_covered] #global idc
+        reward, beams_used = self._calc_reward(self.assigned_beams_per_UE)
+        # if len(h_idc_covered) == 1:
+        #     # H doesnt change within the segment
+        #     segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.assigned_beams_per_UE)
+        #     reward = np.log2(1+10**(max(segment_bf_gains)/10))
+        # else:
+        #     reward = 0
+        #     for i in range(len(h_idc_covered)):
+        #         segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], self.assigned_beams_per_UE)
+        #         segment_achievable_rate = np.log2(1+10**(max(segment_bf_gains)/10))
+        #         if i == 0:
+        #             segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+        #             segment_start = self.ue_traveled_distance
+        #         if i == len(h_idc_covered)-1:
+        #             segment_end = ue_traveled_dist_next
+        #             segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+        #         if i > 0 and i < len(h_idc_covered)-1:
+        #             segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+        #             segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+        #         reward += segment_achievable_rate*(segment_end - segment_start)/total_segment_length  
         self.prev_info['agent_reward'] = reward
         self.reward_log['agent'].append(reward)
 
         if self.enable_baseline:
-            if len(h_idc_covered) == 1:
-                # H doesnt change within the segment
-                baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.baseline_beams)
-                baseline_reward = np.log2(1+10**(max(baseline_segment_bf_gains)/10))
-            else:
-                baseline_reward = 0
-                for i in range(len(h_idc_covered)):
-                    baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], self.baseline_beams)
-                    baseline_segment_achievable_rate = np.log2(1+10**(max(baseline_segment_bf_gains)/10))
-                    if i == 0:
-                        segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                        segment_start = self.ue_traveled_distance
-                    if i == len(h_idc_covered)-1:
-                        segment_end = ue_traveled_dist_next
-                        segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                    if i > 0 and i < len(h_idc_covered)-1:
-                        segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                        segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                    baseline_reward += baseline_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
+            baseline_reward, baseline_beams_used = self._calc_reward(self.baseline_beams)
+            # if len(h_idc_covered) == 1:
+            #     # H doesnt change within the segment
+            #     baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.baseline_beams)
+            #     baseline_reward = np.log2(1+10**(max(baseline_segment_bf_gains)/10))
+            # else:
+            #     baseline_reward = 0
+            #     for i in range(len(h_idc_covered)):
+            #         baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], self.baseline_beams)
+            #         baseline_segment_achievable_rate = np.log2(1+10**(max(baseline_segment_bf_gains)/10))
+            #         if i == 0:
+            #             segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+            #             segment_start = self.ue_traveled_distance
+            #         if i == len(h_idc_covered)-1:
+            #             segment_end = ue_traveled_dist_next
+            #             segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+            #         if i > 0 and i < len(h_idc_covered)-1:
+            #             segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+            #             segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+            #         baseline_reward += baseline_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
             info['baseline_reward'] = baseline_reward
             self.prev_info['baseline_reward'] = baseline_reward
             self.reward_log['baseline'].append(baseline_reward)
             info['baseline_beams'] = self.baseline_beams
         
         if self.enable_genie:
-            info['genie_beams'] = []
-            if len(h_idc_covered) == 1:
-                # H doesnt change within the segment
-                genie_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], np.arange(self.codebook_size))
-                genie_reward = np.log2(1+10**(max(genie_segment_bf_gains)/10))
-                genie_beam = np.argmax(genie_segment_bf_gains)
-                info['genie_beams'].append(genie_beam)
-            else:
-                genie_reward = 0
-                for i in range(len(h_idc_covered)):
-                    genie_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], np.arange(self.codebook_size))
-                    genie_segment_achievable_rate = np.log2(1+10**(max(genie_segment_bf_gains)/10))
-                    info['genie_beams'].append(np.argmax(genie_segment_bf_gains))
-                    if i == 0:
-                        segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                        segment_start = self.ue_traveled_distance
-                    if i == len(h_idc_covered)-1:
-                        segment_end = ue_traveled_dist_next
-                        segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                    if i > 0 and i < len(h_idc_covered)-1:
-                        segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
-                        segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
-                    genie_reward += genie_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
+            genie_reward, genie_beams_used = self._calc_reward(np.arange(self.codebook_size))
+            # info['genie_beams'] = []
+            # if len(h_idc_covered) == 1:
+            #     # H doesnt change within the segment
+            #     genie_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], np.arange(self.codebook_size))
+            #     genie_reward = np.log2(1+10**(max(genie_segment_bf_gains)/10))
+            #     genie_beam = np.argmax(genie_segment_bf_gains)
+            #     info['genie_beams'].append(genie_beam)
+            # else:
+            #     genie_reward = 0
+            #     for i in range(len(h_idc_covered)):
+            #         genie_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[i], np.arange(self.codebook_size))
+            #         genie_segment_achievable_rate = np.log2(1+10**(max(genie_segment_bf_gains)/10))
+            #         info['genie_beams'].append(np.argmax(genie_segment_bf_gains))
+            #         if i == 0:
+            #             segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+            #             segment_start = self.ue_traveled_distance
+            #         if i == len(h_idc_covered)-1:
+            #             segment_end = ue_traveled_dist_next
+            #             segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+            #         if i > 0 and i < len(h_idc_covered)-1:
+            #             segment_start = self.traj_point_distances[h_idc_in_traj_covered[i]]
+            #             segment_end = self.traj_point_distances[h_idc_in_traj_covered[i+1]]
+            #         genie_reward += genie_segment_achievable_rate*(segment_end - segment_start)/total_segment_length      
             info['genie_reward'] = genie_reward
-            info['genie_beams'] = np.unique(info['genie_beams'])
+            info['genie_beams'] = np.unique(genie_beams_used)
             self.prev_info['genie_reward'] = genie_reward
             self.reward_log['genie'].append(genie_reward)
             
-                     
+        if self.enable_exhaustive:
+            tic = time.time()
+            best_reward = None
+            best_beamset = None
+            for combi in itertools.combinations(np.arange(self.codebook_size),self.num_beams_per_UE):
+                combi_beams = list(combi)
+                combi_reward, combi_used_beams = self._calc_reward(combi_beams)
+                if best_reward is None:
+                    best_reward = combi_reward
+                else:
+                    if combi_reward > best_reward:
+                        best_reward = combi_reward
+                        best_beamset = combi_beams
+            info['exhaustive_reward'] = best_reward
+            info['exhaustive_beams'] = best_beamset
+            toc = time.time()
+            print('Time for exhausitve search:{} s'.format(toc-tic))
+
+        if self.full_observation:
+            observation = self._get_full_observation()
+        else:
+            observation = self._get_observation()
+                                         
         self._time_increment()
         # assigned_bf_gains = self.measure_beams_single_UE(self.current_h_idc, self.assigned_beams_per_UE)
         # beam_report = np.zeros((self.codebook_size))
@@ -401,12 +548,42 @@ class BeamManagementEnv(gym.Env):
         #     observation = np.concatenate((beam_report,action),axis=0)
         # else:
         #     observation = beam_report
-        if self.full_observation:
-            observation = self._get_full_observation()
-        else:
-            observation = self._get_observation()
+
         
         return observation, reward, episode_end, info
+
+    def _calc_reward(self, selected_beams):
+        #calculate the sum spetral efficiency of selected beams (integrate over time of SPE of best beams) over the h_indices
+        #h_idc_in_traj_covered: idc of h (local idc) in traj, including starting h (last point in prev segment)
+        #h_idc_covered: global idc
+        #total segment_length: literal
+        #selected_beams: an array of index of beams, not binary vector
+        beams_used = []
+        if len(self.h_idc_covered) == 1:
+            # H doesnt change within the segment
+            segment_bf_gains = self.measure_beams_single_UE(self.h_idc_covered[0], selected_beams)
+            reward = np.log2(1+10**(max(segment_bf_gains)/10))
+            beam = np.argmax(segment_bf_gains)
+            beams_used.append(beam)
+        else:
+            reward = 0
+            for i in range(len(self.h_idc_covered)):
+                segment_bf_gains = self.measure_beams_single_UE(self.h_idc_covered[i], selected_beams)
+                segment_achievable_rate = np.log2(1+10**(max(segment_bf_gains)/10))
+                beams_used.append(np.argmax(segment_bf_gains))
+                if i == 0:
+                    segment_end = self.traj_point_distances[self.h_idc_in_traj_covered[i+1]]
+                    segment_start = self.ue_traveled_distance
+                if i == len(self.h_idc_covered)-1:
+                    segment_end = self.ue_traveled_dist_next
+                    segment_start = self.traj_point_distances[self.h_idc_in_traj_covered[i]]
+                if i > 0 and i < len(self.h_idc_covered)-1:
+                    segment_start = self.traj_point_distances[self.h_idc_in_traj_covered[i]]
+                    segment_end = self.traj_point_distances[self.h_idc_in_traj_covered[i+1]]
+                reward += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length      
+        return reward, beams_used
+  
+        
     
     def render(self):
         print(self.prev_info)
@@ -438,7 +615,7 @@ class BeamManagementEnv(gym.Env):
         baseline_beamset = np.ceil(np.arange(baseline_beamset_start,baseline_beamset_end)).astype(int)
         assert(len(baseline_beamset) == self.num_beams_per_UE)    
         return baseline_beamset
-    
+        
     # def calc_baseline_beams(self, baseline_max_beam):
     #     #calculate the moving spatial window beamset
     #     if baseline_max_beam < 3:
@@ -453,7 +630,22 @@ class BeamManagementEnv(gym.Env):
     #     baseline_beamset = np.arange(baseline_beamset_start,baseline_beamset_end)
     #     assert(len(baseline_beamset) == self.num_beams_per_UE)    
     #     return baseline_beamset
-    
+
+    def update_baseline_beams(self):
+        #spatial moving window baseline
+        if self.t == 0:
+            baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
+        elif self.t == 1:
+            baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.assigned_beams_per_UE))
+        else:
+            baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]        
+        baseline_beamset = self.calc_baseline_beams(baseline_max_beam)   
+        
+        #prophet baseline NOTE that this is always called after _time_increment in reset() or step()
+        baseline_beamset = self.prophet_baseline()
+        
+        self.baseline_beams = baseline_beamset
+            
     def reset(self):
         # self.ue_speed = 5 
 #        self.n_current_UEs = 0
@@ -526,10 +718,41 @@ class BeamManagementEnv(gym.Env):
         # beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
         if self.enable_baseline:
             # baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
+            #spatial moving window baseline
             baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.assigned_beams_per_UE))
-            self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
+            self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)
+            
+            # #prophet baseline that knows perfect beam measurement in the nxt time period
+            # self.baseline_beams = self.prophet_baseline()   
+            
             
         return observation
+    
+    def prophet_baseline(self):
+        #baseline where the full observation in the next time step is known
+        full_ob = self._get_full_observation()
+        return self._pick_beams(full_ob)
+        
+    def _pick_beams(self, observation:np.ndarray):
+        #observation is batchsize x num_measurements x num_beams matrix, iteratively pick best beam
+        selected_beams = np.argsort(np.sum(observation,axis=0))[-self.num_beams_per_UE:]
+        binary_beams = np.zeros(self.codebook_size)
+        binary_beams[selected_beams] = 1
+        
+        # selected_beams = []
+        # pool = list(np.arange(self.nb_actions))
+        # sum_tp = np.sum(observation,axis=0)
+        # sel_beam = np.argmax(sum_tp)
+        # selected_beams.append(sel_beam)
+        # pool.remove(sel_beam)
+        
+        # for it_idx in range(self.num_beams_per_UE):
+        #     sum_tp = np.sum(observation[pool,:],axis=0)
+        #     sel_beam = np.argmax(sum_tp)
+        #     selected_beams.append(sel_beam)
+        #     pool.remove(sel_beam)
+            
+        return selected_beams        
     
     def _time_increment(self):
         self.t += 1
@@ -597,7 +820,7 @@ class BeamManagementEnv(gym.Env):
             next_ue_traveled_distance = (self.t+1)*self.ue_speed
             last_idc_in_traj_in_segment = max(np.nonzero(self.traj_point_distances < next_ue_traveled_distance)[0])
             last_h_idc_global_in_segment = self.traj[last_idc_in_traj_in_segment]
-            beam_report[self.assigned_beams_per_UE] = self.measure_beams_single_UE(last_h_idc_global_in_segment, np.arange(self.codebook_size))
+            beam_report[:] = self.measure_beams_single_UE(last_h_idc_global_in_segment, np.arange(self.codebook_size))
             # self.current_state_single_frame = beam_report
             if self.combine_state:
                 binary_action_vector = np.zeros((self.codebook_size))
@@ -635,7 +858,11 @@ class BeamManagementEnv(gym.Env):
         
  
 # if __name__ == "__main__":
-#     env = BeamManagementEnv(num_antennas=32)    
+#     env = BeamManagementEnv(num_antennas=16, ue_speed=15, enable_exhaustive=True)
+#     env.reset()
+#     a = np.zeros(16)
+#     a[8:] = 1
+#     env.step(a)    
 
 # if __name__ == "__main__":
 #     env = BeamManagementEnv()

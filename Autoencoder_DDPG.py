@@ -73,6 +73,7 @@ class Autoencoder_DDPG(object):
         self.debug = args.debug
         self.actor_lambda = args.actor_lambda
         self.policy_update_counter = 0
+        self.training_log = {'critic_mse':[],'actor_mse':[],'actor_value':[],'actor_total':[]}
 
         # 
         if USE_CUDA: self.cuda()
@@ -99,6 +100,7 @@ class Autoencoder_DDPG(object):
         value_loss = criterion(q_batch, target_q_batch)
         # print(value_loss.item())
         value_loss.backward()
+        self.training_log['critic_mse'].append(value_loss.item())
         self.critic_optim.step()
 
         # Actor update
@@ -112,13 +114,14 @@ class Autoencoder_DDPG(object):
         predicted_beam_qual_masked = torch.mul(predicted_beam_qual, to_tensor(broadcasted_action_batch))
         true_beam_qual = to_tensor(next_state_batch[:,-self.num_measurements:,:])
         beam_qual_prediction_loss = criterion(predicted_beam_qual_masked,true_beam_qual)        
-        
+        self.training_log['actor_mse'].append(beam_qual_prediction_loss.item())
         # Value loss
         actions = to_tensor(self.pick_beams_batch(to_numpy(predicted_beam_qual)))
         policy_loss = -self.critic([states,actions])
         policy_loss = policy_loss.mean()
-        
+        self.training_log['actor_value'].append(policy_loss.item())
         total_loss = (1-self.actor_lambda)*policy_loss + self.actor_lambda * beam_qual_prediction_loss
+        self.training_log['actor_total'].append(total_loss.item())
         total_loss.backward()
         self.actor_optim.step()
         # if self.debug and self.policy_update_counter % 20 == 0:
@@ -231,6 +234,8 @@ class Autoencoder_DDPG(object):
         self.ob_t = obs
         # self.a_t = beams
         self.random_process.reset_states()
+        # self.policy_update_counter = 0
+        # self.training_log = {'critic_mse':[],'actor_mse':[],'actor_value':[],'actor_total':[]}
 
     def load_weights(self, output):
         if output is None: return

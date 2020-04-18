@@ -15,6 +15,8 @@ from util import *
 from BeamManagementEnv import BeamManagementEnv
 import matplotlib.pyplot as plt
 import time
+from tqdm import tqdm
+
 # gym.undo_logger_setup()
     
 def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_episode_length=None, debug=False):
@@ -30,7 +32,8 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
     observation = None
     if evaluate is not None:
         eval_rewards = []
-
+        
+    # pbar = tqdm(total=num_iterations)
     while step < num_iterations:
         # reset if it is the start of episode
         if observation is None:
@@ -85,6 +88,7 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
         #     agent.save_model(output)
 
         # update 
+        # pbar.update(1)
         step += 1
         episode_steps += 1
         episode_reward += reward
@@ -104,13 +108,13 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             if debug:
                 
                 if env.enable_baseline and env.enable_genie:
-                    print('#{:5d}: agent:{:07.4f} baseline:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward,episode_avg_genie_reward))
+                    print('Episode #{:5d} {:5d} steps: agent:{:07.4f} baseline:{:07.4f} genie:{:07.4f}'.format(episode,episode_steps,episode_avg_agent_reward,episode_avg_baseline_reward,episode_avg_genie_reward))
                 elif env.enable_baseline:
-                    print('#{:5d}: agent:{:07.4f} baseline:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward))
+                    print('Episode #{:5d}: agent:{:07.4f} baseline:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward))
                 elif env.enable_genie:
-                    print('#{:5d}: agent:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_genie_reward))
+                    print('Episode #{:5d}: agent:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_genie_reward))
                 else:
-                    print('#{:5d}: agent:{:07.4f}'.format(episode,episode_avg_agent_reward))
+                    print('Episode #{:5d}: agent:{:07.4f}'.format(episode,episode_avg_agent_reward))
 
 
             # temp_action = agent.select_action(observation)
@@ -129,6 +133,7 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             episode_steps = 0
             episode_reward = 0.
             episode += 1
+    # pbar.close()  
     all_results = {'agent_rewards':agent_rewards}
     if evaluate is not None:
         all_results['evalulation_rewards'] = eval_rewards
@@ -159,7 +164,7 @@ def test(num_episodes, agent, env, evaluate, model_path, visualize=True, debug=F
 
 import time
 import seaborn as sns
-
+    
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='PyTorch on TORCS with Multi-modal')
@@ -171,20 +176,20 @@ if __name__ == "__main__":
     parser.add_argument('--rate', default=0.001, type=float, help='learning rate')
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
     parser.add_argument('--warmup', default=100, type=int, help='time without training but only filling the replay memory')
-    parser.add_argument('--discount', default=0.9, type=float, help='')
-    parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
+    parser.add_argument('--discount', default=0.5, type=float, help='')
+    parser.add_argument('--bsize', default=128, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=60000, type=int, help='memory size')
-    parser.add_argument('--tau', default=0.001, type=float, help='moving average for target network')
+    parser.add_argument('--tau', default=0.01, type=float, help='moving average for target network')
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=2, type=float, help='noise sigma') 
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
-    parser.add_argument('--validate_episodes', default=500, type=int, help='how many episode to perform during validate experiment')
+    parser.add_argument('--validate_episodes', default=250, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
-    parser.add_argument('--validate_steps', default=500, type=int, help='how many steps to perform a validate experiment')
+    parser.add_argument('--validate_steps', default=1000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=100000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=50000, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -206,7 +211,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_saved_traj_in_validation',default=True)
     parser.add_argument('--actor_lambda',type=float,default=0.5)
     
-    parser.add_argument('--debug', default = True, dest='debug')
+    parser.add_argument('--debug', default = False, dest='debug')
 
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)
@@ -247,7 +252,7 @@ if __name__ == "__main__":
                          save_path = args.output, 
                          max_episode_length=args.max_episode_length,
                          use_saved_traj= args.use_saved_traj_in_validation)    
-    
+    # evaluate = None
     if args.mode == 'train':
         tic = time.time()
         rewards = train(args.train_iter, agent, env, evaluate, 
@@ -264,13 +269,32 @@ if __name__ == "__main__":
         
         plt.figure()
         plt.plot(rewards['agent_rewards'])
-        plt.xlabel('episodes')
+        plt.xlabel('training steps')
         plt.ylabel('avg episode reward')
         
+        if evaluate is not None:
+            plt.figure()
+            plt.plot(rewards['evalulation_rewards'])
+            plt.xlabel('training steps')
+            plt.ylabel('eval avg episode reward')
+        
         plt.figure()
-        plt.plot(rewards['evalulation_rewards'])
-        plt.xlabel('episodes')
-        plt.ylabel('eval avg episode reward')
+        plt.plot(agent.training_log['critic_mse'],label='critic MSE')
+        plt.legend()
+        plt.show()
+        plt.figure()
+        plt.plot(agent.training_log['actor_mse'],label='actor MSE')
+        plt.legend()
+        plt.show()
+        plt.figure()
+        plt.plot(agent.training_log['actor_value'],label='actor Value')
+        plt.legend()
+        plt.show()
+        plt.figure()
+        plt.plot(agent.training_log['actor_total'],label='actor Total')
+        plt.xlabel('training steps')
+        plt.legend()
+        plt.show()
         
         # if args.enable_baseline and args.enable_genie:
         #     plt.figure()
