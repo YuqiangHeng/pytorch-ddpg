@@ -68,7 +68,7 @@ class multiwindow_DDPG(object):
         self.ob_t = None # Most recent observation
         self.a_t = None # Most recent action
         self.is_training = True
-
+        self.training_log = {'critic_mse':[],'actor_mse':[],'actor_value':[],'actor_total':[]}
         # 
         if USE_CUDA: self.cuda()
 
@@ -78,19 +78,20 @@ class multiwindow_DDPG(object):
         next_state_batch, terminal_batch = self.memory.sample_and_split(self.batch_size)
 
         # Prepare for the target q batch
-        next_q_values = self.critic_target([
-            to_tensor(next_state_batch, volatile=True),
-            self.actor_target(to_tensor(next_state_batch, volatile=True)),
-        ])
-        next_q_values.volatile=False
+        with torch.no_grad():
+            next_q_values = self.critic_target([
+                torch.from_numpy(next_state_batch),
+                self.actor_target(torch.from_numpy(next_state_batch)),
+            ])
+        next_q_values.requires_grad = True
 
-        target_q_batch = to_tensor(reward_batch) + \
-            self.discount*to_tensor(terminal_batch.astype(np.float))*next_q_values
+        target_q_batch = torch.from_numpy(reward_batch) + \
+            self.discount*torch.from_numpy(terminal_batch.astype(np.float))*next_q_values
 
         # Critic update
         self.critic.zero_grad()
 
-        q_batch = self.critic([ to_tensor(state_batch), to_tensor(action_batch) ])
+        q_batch = self.critic([ torch.from_numpy(state_batch), torch.from_numpy(action_batch) ])
         
         value_loss = criterion(q_batch, target_q_batch)
         value_loss.backward()
@@ -100,8 +101,8 @@ class multiwindow_DDPG(object):
         self.actor.zero_grad()
 
         policy_loss = -self.critic([
-            to_tensor(state_batch),
-            self.actor(to_tensor(state_batch))
+            torch.from_numpy(state_batch),
+            self.actor(torch.from_numpy(state_batch))
         ])
 
         policy_loss = policy_loss.mean()
@@ -156,14 +157,14 @@ class multiwindow_DDPG(object):
     #     self.a_t = action
     #     return action
  
-    # a modified implementation of selection_action that enables window_length > 1
+    # a modified implementation of selection_action that enables window_length > 1, only used when interacting with environment, don't use for policy update
     def select_action(self, observation, decay_epsilon=True):
 #        s_t = self.memory.get_recent_state(np.concatenate((observation, self.a_t),axis=0))
         s_t = self.memory.get_recent_state(observation)
         #remove existing empty dimension and add batch dimension 
         s_t_array = np.array([np.squeeze(np.array(s_t))])
         action = to_numpy(
-            self.actor(to_tensor(s_t_array))
+            self.actor(torch.from_numpy(s_t_array))
         ).squeeze(0)
         
         # action = to_numpy(

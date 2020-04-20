@@ -47,6 +47,7 @@ class Autoencoder_DDPG(object):
         self.actor = MLP(self.nb_states, self.window_length, self.num_measurements)
         self.actor_target = MLP(self.nb_states, self.window_length, self.num_measurements)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
+        
         self.critic = SerializedCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements)
         self.critic_target = SerializedCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements)
         self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
@@ -86,8 +87,9 @@ class Autoencoder_DDPG(object):
         # Prepare for the target q batch
         with torch.no_grad():
             next_states = to_tensor(next_state_batch)
-            predicted_beam_qual_target = self.actor_target(next_states)        
-            next_actions = to_tensor(self.pick_beams_batch(to_numpy(predicted_beam_qual_target)))
+            target_actor_output = self.actor_target(next_states) 
+            # next_actions = torch.from_numpy(self.pick_beams_batch(to_numpy(predicted_beam_qual_target)))
+            next_actions = to_tensor(self.actor_target.select_beams(to_numpy(target_actor_output), self.nb_actions, self.num_beams_per_UE))            
             next_q_values = self.critic_target([next_states,next_actions])
         # next_q_values.volatile=False
         next_q_values.requires_grad = True
@@ -106,23 +108,32 @@ class Autoencoder_DDPG(object):
         # Actor update
         self.actor.zero_grad()
         
-        # Beam qual prediction loss
+        # Beam qual prediction loss, only if using MSE of actor output
         states = to_tensor(state_batch)
-        predicted_beam_qual = self.actor(states)
+        actor_output = self.actor(states)
+        # predicted_beam_qual = self.actor(states)
         broadcasted_action_batch = np.expand_dims(action_batch, axis=1)
         broadcasted_action_batch = np.repeat(broadcasted_action_batch, self.num_measurements, axis=1)
-        predicted_beam_qual_masked = torch.mul(predicted_beam_qual, to_tensor(broadcasted_action_batch))
+        actor_output_masked = torch.mul(actor_output, to_tensor(broadcasted_action_batch))
         true_beam_qual = to_tensor(next_state_batch[:,-self.num_measurements:,:])
-        beam_qual_prediction_loss = criterion(predicted_beam_qual_masked,true_beam_qual)        
-        self.training_log['actor_mse'].append(beam_qual_prediction_loss.item())
+        actor_output_loss = criterion(actor_output_masked,true_beam_qual)        
+        self.training_log['actor_mse'].append(actor_output_loss.item())
+        
         # Value loss
-        actions = to_tensor(self.pick_beams_batch(to_numpy(predicted_beam_qual)))
+        # actions = torch.from_numpy(self.pick_beams_batch(to_numpy(predicted_beam_qual)))
+        actions = to_tensor(self.actor.select_beams(to_numpy(actor_output),self.nb_actions,self.num_beams_per_UE))        
         policy_loss = -self.critic([states,actions])
         policy_loss = policy_loss.mean()
         self.training_log['actor_value'].append(policy_loss.item())
-        total_loss = (1-self.actor_lambda)*policy_loss + self.actor_lambda * beam_qual_prediction_loss
+        # policy_loss.backward()
+        
+        
+        # Combine actor output MSE and -value from critic
+        total_loss = (1-self.actor_lambda)*policy_loss + self.actor_lambda * actor_output_loss
         self.training_log['actor_total'].append(total_loss.item())
         total_loss.backward()
+        
+        #take a gradient step
         self.actor_optim.step()
         # if self.debug and self.policy_update_counter % 20 == 0:
         #     print('Critic Loss: {}. Actor Prediction Loss: {}. Actor Policy Loss: {}'.format(value_loss.item(), beam_qual_prediction_loss.item(),policy_loss.item()))
@@ -155,6 +166,7 @@ class Autoencoder_DDPG(object):
         if self.is_training:
             self.memory.append(self.ob_t, self.a_t, r_t, done)
             self.ob_t = ob_t1
+            
     def random_action(self):
         action = np.random.uniform(-1.,1.,self.nb_actions)
         binary_action = np.zeros(self.nb_actions)
@@ -181,12 +193,9 @@ class Autoencoder_DDPG(object):
         s_t = self.memory.get_recent_state(observation)
         #remove existing empty dimension and add batch dimension 
         s_t_array = np.array([np.squeeze(np.array(s_t))])
-        # action = to_numpy(
-        #     self.actor(to_tensor(s_t_array))
-        # ).squeeze(0)
-        actor_output = to_numpy(self.actor(to_tensor(s_t_array))).squeeze(0)
+        actor_output = to_numpy(self.actor(to_tensor(s_t_array))) #bsize(1) x actor_output_shape
         actor_output += self.is_training*max(self.epsilon, 0)*self.random_process.sample()
-        action = self.pick_beams(actor_output)     
+        action = self.actor.select_beams(actor_output, self.nb_actions, self.num_beams_per_UE).squeeze(0)
         # action = to_numpy(
         #     self.actor(to_tensor(np.array([s_t])))
         # ).squeeze(0)
@@ -198,33 +207,33 @@ class Autoencoder_DDPG(object):
         self.a_t = action
         return action
     
-    def pick_beams(self, observation:np.ndarray):
-        #observation is batchsize x num_measurements x num_beams matrix, iteratively pick best beam
-        selected_beams = np.argsort(np.sum(observation,axis=0))[-self.num_beams_per_UE:]
-        binary_beams = np.zeros(self.nb_actions)
-        binary_beams[selected_beams] = 1
+    # def pick_beams(self, observation:np.ndarray):
+    #     #observation is batchsize x num_measurements x num_beams matrix, iteratively pick best beam
+    #     selected_beams = np.argsort(np.sum(observation,axis=0))[-self.num_beams_per_UE:]
+    #     binary_beams = np.zeros(self.nb_actions)
+    #     binary_beams[selected_beams] = 1
         
-        # selected_beams = []
-        # pool = list(np.arange(self.nb_actions))
-        # sum_tp = np.sum(observation,axis=0)
-        # sel_beam = np.argmax(sum_tp)
-        # selected_beams.append(sel_beam)
-        # pool.remove(sel_beam)
+    #     # selected_beams = []
+    #     # pool = list(np.arange(self.nb_actions))
+    #     # sum_tp = np.sum(observation,axis=0)
+    #     # sel_beam = np.argmax(sum_tp)
+    #     # selected_beams.append(sel_beam)
+    #     # pool.remove(sel_beam)
         
-        # for it_idx in range(self.num_beams_per_UE):
-        #     sum_tp = np.sum(observation[pool,:],axis=0)
-        #     sel_beam = np.argmax(sum_tp)
-        #     selected_beams.append(sel_beam)
-        #     pool.remove(sel_beam)
+    #     # for it_idx in range(self.num_beams_per_UE):
+    #     #     sum_tp = np.sum(observation[pool,:],axis=0)
+    #     #     sel_beam = np.argmax(sum_tp)
+    #     #     selected_beams.append(sel_beam)
+    #     #     pool.remove(sel_beam)
             
-        return binary_beams
+    #     return binary_beams
     
-    def pick_beams_batch(self, observation:np.ndarray):
-        assert(observation.shape[0] == self.batch_size)
-        binary_beams = np.zeros((self.batch_size, self.nb_actions))
-        for i in range(self.batch_size):
-            binary_beams[i,:] = self.pick_beams(observation[i])
-        return binary_beams
+    # def pick_beams_batch(self, observation:np.ndarray):
+    #     assert(observation.shape[0] == self.batch_size)
+    #     binary_beams = np.zeros((self.batch_size, self.nb_actions))
+    #     for i in range(self.batch_size):
+    #         binary_beams[i,:] = self.pick_beams(observation[i])
+    #     return binary_beams
     # def reset(self, obs):
     #     self.ob_t = obs
     #     self.random_process.reset_states()

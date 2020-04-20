@@ -30,8 +30,11 @@ def conv_output_size(shape,padding,dilation,kernel_size,stride):
 
 def conv2d_output_dim(shape,padding,dilation,kernel_size,stride):
     return (conv_output_size(shape[0],padding[0],dilation[0],kernel_size[0],stride[0]),conv_output_size(shape[1],padding[1],dilation[1],kernel_size[1],stride[1]))
+
+
     
 
+        
 # class Actor(nn.Module):
 #     def __init__(self, nb_states, nb_actions, hidden1=400, hidden2=300, init_w=3e-3):
 #         super(Actor, self).__init__()
@@ -124,6 +127,14 @@ class Actor(nn.Module):
         # self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
         self.fc2.weight.data.uniform_(-init_w, init_w)
         # self.fc3.weight.data.uniform_(-init_w, init_w)
+        
+    def select_beams(self, x, nb_actions, n):
+        bsize = x.shape[0]
+        binary_beams = np.zeros((bsize, nb_actions))
+        for i in range(bsize):
+            sel = np.argsort(x[i])[-n:]
+            binary_beams[i,sel] = 1
+        return binary_beams
     
     def forward(self, x):
         # print(x.size())
@@ -300,7 +311,14 @@ class MLP(nn.Module):
         dummy_flat = self.flatten(dummy_input)
         nsize = dummy_flat.data.view(batch_size,-1).size(1)
         return nsize
-
+    
+    def select_beams(self, x, nb_actions, n):
+        bsize = x.shape[0]
+        binary_beams = np.zeros((bsize, nb_actions))
+        for i in range(bsize):
+            sel = np.argsort(np.sum(x[i],axis=0))[-n:]
+            binary_beams[i,sel] = 1
+        return binary_beams
 
     def forward(self,x):
         flat = self.flatten(x)
@@ -344,6 +362,13 @@ class SerializedAutonEncoder(nn.Module):
         nsize = dummy_flat.data.view(batch_size,-1).size(1)
         return nsize
 
+    def select_beams(self, x, nb_actions, n):
+        bsize = x.shape[0]
+        binary_beams = np.zeros((bsize, nb_actions))
+        for i in range(bsize):
+            sel = np.argsort(np.sum(x[i],axis=0))[-n:]
+            binary_beams[i,sel] = 1
+        return binary_beams
 
     def forward(self,x):
         flat = self.flatten(x)
@@ -392,6 +417,14 @@ class ConvAutoEncoder(nn.Module):
         dummy_input = torch.autograd.Variable(torch.rand(batch_size, *self.input_shape))
         output_feat = self.forward(dummy_input)
         print('decoded dimension:',output_feat.shape)
+
+    def select_beams(self, x, nb_actions, n):
+        bsize = x.shape[0]
+        binary_beams = np.zeros((bsize, nb_actions))
+        for i in range(bsize):
+            sel = np.argsort(np.sum(x[i],axis=0))[-n:]
+            binary_beams[i,sel] = 1
+        return binary_beams
     
     def forward(self, x):
         # print(x.size())

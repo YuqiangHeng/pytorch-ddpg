@@ -6,6 +6,7 @@ from memory import BeamSpaceSequentialMemory
 from util import *
 from Autoencoder_DDPG import Autoencoder_DDPG
 from copy import deepcopy
+import torch
 
 class Evaluator(object):
 
@@ -54,7 +55,7 @@ class Evaluator(object):
                 episode_reward += reward
                 episode_steps += 1
 
-            if debug: prYellow('[Evaluate] #Episode{}: episode_reward:{}'.format(episode,episode_reward))
+            if debug: print('[Evaluate] #Episode{}: episode_reward:{}'.format(episode,episode_reward))
             result.append(episode_reward)
 
         result = np.array(result).reshape(-1,1)
@@ -102,8 +103,10 @@ class DDPGAgentEval(object):
         s_t = self.memory.get_recent_state(observation)
         #remove existing empty dimension and add batch dimension 
         s_t_array = np.array([np.squeeze(np.array(s_t))])
-        actor_output = to_numpy(self.actor(to_tensor(s_t_array))).squeeze(0)
-        action = self.pick_beams(actor_output)      
+        # actor_output = to_numpy(self.actor(torch.from_numpy(s_t_array))).squeeze(0)
+        actor_output = to_numpy(self.actor(to_tensor(s_t_array)))
+        action = self.actor.select_beams(actor_output, self.nb_actions, self.num_beams_per_UE) 
+        action = action.squeeze(0)
         self.a_t = action
         return action
     
