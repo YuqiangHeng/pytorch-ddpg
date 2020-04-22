@@ -313,11 +313,13 @@ def train(num_iterations, agent:BeamPredictor, env:BeamManagementEnv,  evaluate:
             train_times.append(step)
             # reset
             observation = None
+            train_episode_masked_mse = 0
+            train_episode_full_mse = 0
             episode_steps = 0
             episode_reward = 0.
             episode += 1
             
-    all_results = {'eval_masked_mse':eval_masked_mse,'eval_full_mse':eval_full_mse,'eval_time_steps':eval_times,'train_masked_mse':train_masked_mse,'train_full_mse':train_full_mse,'train_times':train_times}
+    all_results = {'eval_masked_mse':eval_masked_mse,'eval_full_mse':eval_full_mse,'eval_times':eval_times,'train_masked_mse':train_masked_mse,'train_full_mse':train_full_mse,'train_times':train_times}
     return all_results
 
 if __name__ == "__main__":
