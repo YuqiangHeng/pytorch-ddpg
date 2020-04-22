@@ -64,6 +64,9 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             val_env = deepcopy(env)
             val_env.enable_baseline = True
             val_env.enable_genie = True
+            val_env.enable_exhaustive = False
+            if step == num_iterations-1:
+                val_env.enable_exhaustive = True
             val_env.reset()
             validate_rewards = evaluate(val_env, evalagent, debug=False, visualize=False, save = False)
             toc = time.time()
@@ -72,8 +75,12 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             eval_rewards.append(np.mean(validate_rewards['agent_rewards']))
             plt.figure()
             sns.kdeplot(validate_rewards['agent_rewards'],label='agent')
-            sns.kdeplot(validate_rewards['baseline_rewards'],label='baseline')
-            sns.kdeplot(validate_rewards['genie_rewards'],label='genie')
+            if val_env.enable_baseline:
+                sns.kdeplot(validate_rewards['baseline_rewards'],label='baseline')
+            if val_env.enable_genie:
+                sns.kdeplot(validate_rewards['genie_rewards'],label='upperbound')
+            if val_env.enable_exhaustive:
+                sns.kdeplot(validate_rewards['exhaustive_rewards'],label='iterative selection with genie')
             plt.legend();
             # plt.figure()
             # plt.plot(rewards[0])
@@ -181,12 +188,12 @@ if __name__ == "__main__":
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=2, type=float, help='noise sigma') 
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
-    parser.add_argument('--validate_episodes', default=250, type=int, help='how many episode to perform during validate experiment')
+    parser.add_argument('--validate_episodes', default=100, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
     parser.add_argument('--validate_steps', default=1000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=20000, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=20001, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -197,8 +204,8 @@ if __name__ == "__main__":
     # parser.add_argument('--l2norm', default=0.01, type=float, help='l2 weight decay') # TODO
     # parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
     parser.add_argument('--num_beams_per_UE',default=8,type=int)
-    parser.add_argument('--enable_baseline',default=True)
-    parser.add_argument('--enable_genie',default=True)
+    parser.add_argument('--enable_baseline',default=False)
+    parser.add_argument('--enable_genie',default=False)
     parser.add_argument('--ue_speed',default=10)
     parser.add_argument('--full_observation', default=False)
     parser.add_argument('--conv2d_1_kernel_size',type=int,default=5)

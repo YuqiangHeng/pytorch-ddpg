@@ -512,22 +512,37 @@ class BeamManagementEnv(gym.Env):
             self.reward_log['genie'].append(genie_reward)
             
         if self.enable_exhaustive:
-            tic = time.time()
-            best_reward = None
-            best_beamset = None
-            for combi in itertools.combinations(np.arange(self.codebook_size),self.num_beams_per_UE):
-                combi_beams = list(combi)
-                combi_reward, combi_used_beams = self._calc_reward(combi_beams)
-                if best_reward is None:
-                    best_reward = combi_reward
-                else:
-                    if combi_reward > best_reward:
-                        best_reward = combi_reward
-                        best_beamset = combi_beams
-            info['exhaustive_reward'] = best_reward
-            info['exhaustive_beams'] = best_beamset
-            toc = time.time()
-            print('Time for exhausitve search:{} s'.format(toc-tic))
+            # tic = time.time()
+            # best_reward = None
+            # best_beamset = None
+            # for combi in itertools.combinations(np.arange(self.codebook_size),self.num_beams_per_UE):
+            #     combi_beams = list(combi)
+            #     combi_reward, combi_used_beams = self._calc_reward(combi_beams)
+            #     if best_reward is None:
+            #         best_reward = combi_reward
+            #     else:
+            #         if combi_reward > best_reward:
+            #             best_reward = combi_reward
+            #             best_beamset = combi_beams
+            # info['exhaustive_reward'] = best_reward
+            # info['exhaustive_beams'] = best_beamset
+            # toc = time.time()
+            # print('Time for exhausitve search:{} s'.format(toc-tic))
+            
+            # tic = time.time()
+            incremental_selected = []
+            pool = list(np.arange(self.codebook_size))
+            while len(incremental_selected) < self.num_beams_per_UE:
+                rewards = [self._calc_reward(np.array(incremental_selected + [i]))[0] for i in pool]
+                sel = pool[np.argmax(rewards)]
+                incremental_selected.append(sel)
+                pool.remove(sel)
+            incremental_sel_reward = self._calc_reward(incremental_selected)[0]
+            # toc = time.time()
+            # print('Time for incremental coverage search:{} s'.format(toc-tic))
+            info['incremental_reward'] = incremental_sel_reward
+            info['incremental_beams'] = incremental_selected
+            self.reward_log['exhaustive'].append(incremental_sel_reward)
 
         if self.full_observation:
             observation = self._get_full_observation()
@@ -539,6 +554,7 @@ class BeamManagementEnv(gym.Env):
         # beam_report = np.zeros((self.codebook_size))
         # beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
         
+            
         # update baseline beams (used in next time step) that's centered around the best beam in the last h in this segment
         if self.enable_baseline:
             baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
@@ -655,6 +671,8 @@ class BeamManagementEnv(gym.Env):
             self.reward_log['baseline'] = []
         if self.enable_genie:
             self.reward_log['genie'] = []
+        if self.enable_exhaustive:
+            self.reward_log['exhaustive'] = []
         
         self.traj, self.traj_pos, self.traj_edge_lengths, self.traj_total_len, self.traj_point_distances = self.get_trajectory()
         # self.traj = self.get_trajectory()
@@ -732,6 +750,19 @@ class BeamManagementEnv(gym.Env):
         #baseline where the full observation in the next time step is known
         full_ob = self._get_full_observation()
         return self._pick_beams(full_ob)
+    
+    # def _incremental_coverage_beams(self, observation:np.ndarray):
+    #     selected_beams = []
+    #     pool = [i for i in range(self.codebook_size)]
+    #     while len(selected_beams) < self.num_beams_per_UE:
+    #         if len(selected_beams) == 0:
+    #             sel = np.argmax(np.sum(observation,axis=0))
+    #             selected_beams.append(sel)
+    #             pool.remove(sel)
+    #         else:
+    #             for i in pool:
+                    
+        
         
     def _pick_beams(self, observation:np.ndarray):
         #observation is batchsize x num_measurements x num_beams matrix, iteratively pick best beam

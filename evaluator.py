@@ -141,6 +141,8 @@ class BeamSelectionEvaluator(object):
             baseline_rewards = []
         if env.enable_genie:
             genie_rewards = []
+        if env.enable_exhaustive:
+            exhaustive_rewards = []
         step = episode = episode_steps = 0
         episode_reward = 0.
         observation = None          
@@ -181,7 +183,10 @@ class BeamSelectionEvaluator(object):
                     baseline_rewards.append(episode_avg_baseline_reward)
                 if env.enable_genie:
                     episode_avg_genie_reward = sum(env.reward_log['genie'])/episode_steps
-                    genie_rewards.append(episode_avg_genie_reward)            
+                    genie_rewards.append(episode_avg_genie_reward)    
+                if env.enable_exhaustive:
+                    episode_avg_exhaustive_reward = sum(env.reward_log['exhaustive'])/episode_steps
+                    exhaustive_rewards.append(episode_avg_exhaustive_reward)
             
                 if debug:
                     if env.enable_baseline and env.enable_genie:
@@ -210,14 +215,25 @@ class BeamSelectionEvaluator(object):
         # allow env to generate traj
         env.set_data_mode(use_saved_trajectory = False, num_saved_traj = None)
                 
-        if env.enable_baseline and env.enable_genie:
-            return {'agent_rewards':agent_rewards, 'baseline_rewards':baseline_rewards, 'genie_rewards':genie_rewards}
-        elif env.enable_baseline:
-            return {'agent_rewards':agent_rewards, 'baseline_rewards':baseline_rewards}
-        elif env.enable_genie:
-            return {'agent_rewards':agent_rewards, 'genie_rewards':genie_rewards}
-        else:
-            return {'agent_rewards':agent_rewards}
+        return_results = {'agent_rewards':agent_rewards}
+        if env.enable_baseline:
+            return_results['baseline_rewards'] = baseline_rewards
+        if env.enable_genie:
+            return_results['genie_rewards'] = genie_rewards
+        if env.enable_exhaustive:
+            return_results['exhaustive_rewards'] = exhaustive_rewards
+            
+            
+        # if env.enable_baseline and env.enable_genie:
+        #     return {'agent_rewards':agent_rewards, 'baseline_rewards':baseline_rewards, 'genie_rewards':genie_rewards}
+        # elif env.enable_baseline:
+        #     return {'agent_rewards':agent_rewards, 'baseline_rewards':baseline_rewards}
+        # elif env.enable_genie:
+        #     return {'agent_rewards':agent_rewards, 'genie_rewards':genie_rewards}
+        # else:
+        #     return {'agent_rewards':agent_rewards}
+        
+        return return_results
 
     def save_results(self, fn):
 

@@ -316,7 +316,14 @@ class MLP(nn.Module):
         bsize = x.shape[0]
         binary_beams = np.zeros((bsize, nb_actions))
         for i in range(bsize):
-            sel = np.argsort(np.sum(x[i],axis=0))[-n:]
+            sel = []
+            pool = list(np.arange(nb_actions))
+            while len(sel) < n:
+                temp_r = [x[i,:,np.array(sel+[b])].max(axis=1).sum() for b in pool]
+                temp_sel = pool[np.argmax(temp_r)]
+                sel.append(temp_sel)
+                pool.remove(temp_sel)
+            # sel = np.argsort(np.sum(x[i],axis=0))[-n:]
             binary_beams[i,sel] = 1
         return binary_beams
 
