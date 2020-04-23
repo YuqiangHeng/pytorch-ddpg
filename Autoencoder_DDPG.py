@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 
-from model import (Actor, Critic,MLP,SerializedCritic)
+from model import (Actor, Critic,MLP,MLPDist, SerializedCritic)
 from memory import SequentialMemory,BeamSpaceSequentialMemory
 from random_process import OrnsteinUhlenbeckProcess
 from util import *
@@ -44,8 +44,8 @@ class Autoencoder_DDPG(object):
         # self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
         # self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
         
-        self.actor = MLP(self.nb_states, self.window_length, self.num_measurements)
-        self.actor_target = MLP(self.nb_states, self.window_length, self.num_measurements)
+        self.actor = MLPDist(self.nb_states, self.window_length, self.num_measurements)
+        self.actor_target = MLPDist(self.nb_states, self.window_length, self.num_measurements)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
         
         self.critic = SerializedCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements)
@@ -58,7 +58,7 @@ class Autoencoder_DDPG(object):
         #Create replay buffer
         # self.memory = SequentialMemory(limit=args.rmsize, window_length=args.window_length)
         self.memory = BeamSpaceSequentialMemory(limit=args.rmsize, window_length=self.window_length, num_measurements=self.num_measurements)
-        self.random_process = OrnsteinUhlenbeckProcess(size=(self.num_measurements,self.nb_states), theta=args.ou_theta, mu=args.ou_mu, sigma=args.ou_sigma)
+        self.random_process = OrnsteinUhlenbeckProcess(size=self.actor.outshape, theta=args.ou_theta, mu=args.ou_mu, sigma=args.ou_sigma)
 
         # Hyper-parameters
         self.batch_size = args.bsize
@@ -112,12 +112,12 @@ class Autoencoder_DDPG(object):
         states = to_tensor(state_batch)
         actor_output = self.actor(states)
         # predicted_beam_qual = self.actor(states)
-        broadcasted_action_batch = np.expand_dims(action_batch, axis=1)
-        broadcasted_action_batch = np.repeat(broadcasted_action_batch, self.num_measurements, axis=1)
-        actor_output_masked = torch.mul(actor_output, to_tensor(broadcasted_action_batch))
-        true_beam_qual = to_tensor(next_state_batch[:,-self.num_measurements:,:])
-        actor_output_loss = criterion(actor_output_masked,true_beam_qual)        
-        self.training_log['actor_mse'].append(actor_output_loss.item())
+        # broadcasted_action_batch = np.expand_dims(action_batch, axis=1)
+        # broadcasted_action_batch = np.repeat(broadcasted_action_batch, self.num_measurements, axis=1)
+        # actor_output_masked = torch.mul(actor_output, to_tensor(broadcasted_action_batch))
+        # true_beam_qual = to_tensor(next_state_batch[:,-self.num_measurements:,:])
+        # actor_output_loss = criterion(actor_output_masked,true_beam_qual)        
+        # self.training_log['actor_mse'].append(actor_output_loss.item())
         
         # Value loss
         # actions = torch.from_numpy(self.pick_beams_batch(to_numpy(predicted_beam_qual)))
@@ -125,13 +125,13 @@ class Autoencoder_DDPG(object):
         policy_loss = -self.critic([states,actions])
         policy_loss = policy_loss.mean()
         self.training_log['actor_value'].append(policy_loss.item())
-        # policy_loss.backward()
+        policy_loss.backward()
         
         
-        # Combine actor output MSE and -value from critic
-        total_loss = (1-self.actor_lambda)*policy_loss + self.actor_lambda * actor_output_loss
-        self.training_log['actor_total'].append(total_loss.item())
-        total_loss.backward()
+        # # Combine actor output MSE and -value from critic
+        # total_loss = (1-self.actor_lambda)*policy_loss + self.actor_lambda * actor_output_loss
+        # self.training_log['actor_total'].append(total_loss.item())
+        # total_loss.backward()
         
         #take a gradient step
         self.actor_optim.step()
