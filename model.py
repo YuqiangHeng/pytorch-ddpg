@@ -338,6 +338,54 @@ class MLP(nn.Module):
         out = out.view(-1,*self.outshape)
         return out
 
+class MLPDist(nn.Module):
+    def __init__(self, nb_states, window_len, num_measurements):
+        super().__init__()
+        self.flatten = nn.Flatten()
+        self.input_shape = (window_len*num_measurements, nb_states)
+        nsize = self._serial_input_size(self.input_shape)
+        hidden1 = int(nsize/2)
+        hidden2 = int(nsize/4)
+        hidden3 = int(nsize/8)
+        self.outdim = nb_states
+        self.outshape = nb_states
+        self.fc1 = nn.Sequential(nn.Linear(nsize,hidden1),
+                                    nn.ReLU())
+        self.fc2 = nn.Sequential(nn.Linear(hidden1,hidden2),
+                                    nn.ReLU())
+        self.fc3 = nn.Sequential(nn.Linear(hidden2,hidden2),
+                                    nn.ReLU())
+        # self.fc4 = nn.Sequential(nn.Linear(hidden2,hidden2),
+        #                             nn.ReLU())
+        self.fc5 = nn.Sequential(nn.Linear(hidden2,self.outdim),
+                                    nn.ReLU())
+        self.fc6 = nn.Sequential(nn.Linear(self.outdim,self.outdim),
+                                 nn.Tanh())
+
+    def _serial_input_size(self, shape):
+        batch_size = 1
+        dummy_input = torch.autograd.Variable(torch.rand(batch_size, *shape))
+        dummy_flat = self.flatten(dummy_input)
+        nsize = dummy_flat.data.view(batch_size,-1).size(1)
+        return nsize
+    
+    def select_beams(self, x, nb_actions, n):
+        bsize = x.shape[0]
+        binary_beams = np.zeros((bsize, nb_actions))
+        for i in range(bsize):
+            sel = np.argsort(x[i])[-n:]
+            binary_beams[i,sel] = 1
+        return binary_beams
+    
+    def forward(self,x):
+        flat = self.flatten(x)
+        out = self.fc1(flat)
+        out = self.fc2(out)
+        out = self.fc3(out)
+        # out = self.fc4(out)
+        out = self.fc5(out)
+        out = self.fc6(out)
+        return out
 
 class SerializedAutonEncoder(nn.Module):
     def __init__(self, nb_states, window_len, num_measurements):
@@ -442,6 +490,19 @@ class ConvAutoEncoder(nn.Module):
         decoded = self.deconv2(decoded)
         return decoded.squeeze(1)
         
+# class IteractiveActor(nn.Module):
+#     def __init__(self, nb_states，nb_actions, window_len, num_measurements):
+#         super().__init__()
+#         self.nb_states = nb_states
+#         self.nb_actions = nb_actions
+#         self.window_len = window_len
+#         self.num_measurements = num_measurements
+#         self.input_shape = (self.window_len * self.num_measurements, nb_states)
+        
+#     def forward(self):
+        
+        
+
         
 from BeamManagementEnv import BeamManagementEnv
 from memory import SequentialMemory,BeamSpaceSequentialMemory,RingBuffer
