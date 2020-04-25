@@ -33,6 +33,7 @@ class BeamPredictor(object):
         self.nb_states = nb_states
         self.nb_actions= nb_actions
         self.num_beams_per_UE = args.num_beams_per_UE
+        self.num_beams_per_report = args.num_beams_per_report
         self.num_measurements = args.num_measurements
         self.window_length = args.window_length
         
@@ -49,7 +50,7 @@ class BeamPredictor(object):
         self.a_t = None # Most recent action
         self.is_training = True
         self.debug = args.debug
-        self.training_log = {'prediction_masked_mse':[],'prediction_all_mse':[]}
+        self.training_log = {'prediction_masked_mse':[],'prediction_full_mse':[]}
 
         # 
         if USE_CUDA: self.cuda()
@@ -68,12 +69,12 @@ class BeamPredictor(object):
         current_state_mask = np.zeros((self.batch_size,self.num_measurements*self.window_length,self.nb_states))
         for i in range(self.batch_size):
             for j in range(self.num_measurements*self.window_length):
-                current_state_mask[i,j,np.argsort(state_batch[i,j,:])[-self.num_beams_per_UE:]] = 1
+                current_state_mask[i,j,np.argsort(state_batch[i,j,:])[-self.num_beams_per_report:]] = 1
                 
         next_observation_mask = np.zeros((self.batch_size,self.num_measurements,self.nb_states))
         for i in range(self.batch_size):
             for j in range(self.num_measurements):
-                next_observation_mask[i,j,np.argsort(next_observation_batch[i,j,:])[-self.num_beams_per_UE:]] = 1  
+                next_observation_mask[i,j,np.argsort(next_observation_batch[i,j,:])[-self.num_beams_per_report:]] = 1  
                 
         states = to_tensor(state_batch)
         states_masked = torch.mul(states, to_tensor(current_state_mask))
@@ -82,14 +83,14 @@ class BeamPredictor(object):
         true_beam_qual = to_tensor(next_observation_batch)
         true_beam_qual_masked = torch.mul(true_beam_qual, to_tensor(next_observation_mask))
         prediction_masked_mse = criterion(predicted_beam_qual_masked,true_beam_qual_masked)    
-        prediction_all_mse = criterion(predicted_beam_qual,true_beam_qual)    
+        prediction_full_mse = criterion(predicted_beam_qual,true_beam_qual)    
         self.training_log['prediction_masked_mse'].append(prediction_masked_mse.item())
-        self.training_log['prediction_all_mse'].append(prediction_all_mse.item())
+        self.training_log['prediction_full_mse'].append(prediction_full_mse.item())
         
         prediction_masked_mse.backward()
         self.actor_optim.step()
         
-        return prediction_masked_mse.item(), prediction_all_mse.item()
+        return prediction_masked_mse.item(), prediction_full_mse.item()
  
        
     def predict(self, current_observation, next_observation):
@@ -98,12 +99,12 @@ class BeamPredictor(object):
         
         current_state_mask = np.zeros(current_state.shape)
         for j in range(self.num_measurements*self.window_length):
-            current_state_mask[0,j,np.argsort(current_state[0,j,:])[-self.num_beams_per_UE:]] = 1
+            current_state_mask[0,j,np.argsort(current_state[0,j,:])[-self.num_beams_per_report:]] = 1
         
         next_observation = np.array([np.squeeze(np.array(next_observation))]) #add batch dim
         next_observation_mask = np.zeros(next_observation.shape)
         for j in range(self.num_measurements):
-            next_observation_mask[0,j,np.argsort(next_observation[0,j,:])[-self.num_beams_per_UE:]] = 1  
+            next_observation_mask[0,j,np.argsort(next_observation[0,j,:])[-self.num_beams_per_report:]] = 1  
         
         current_state_masked = torch.mul(to_tensor(current_state), to_tensor(current_state_mask))
         predicted_beam_qual = self.actor(current_state_masked)
@@ -111,8 +112,21 @@ class BeamPredictor(object):
         true_beam_qual = to_tensor(next_observation)
         true_beam_qual_masked = torch.mul(true_beam_qual, to_tensor(next_observation_mask))
         masked_mse = criterion(predicted_beam_qual_masked, true_beam_qual_masked)
-        all_mse = criterion(predicted_beam_qual, true_beam_qual)
-        return masked_mse.item(), all_mse.item()
+        full_mse = criterion(predicted_beam_qual, true_beam_qual)
+        return masked_mse.item(), full_mse.item()
+    
+    def select_action(self, current_observation):
+        current_state = self.memory.get_recent_state(current_observation)
+        current_state = np.array([np.squeeze(np.array(current_state))]) #add batch dim
+        
+        current_state_mask = np.zeros(current_state.shape)
+        for j in range(self.num_measurements*self.window_length):
+            current_state_mask[0,j,np.argsort(current_state[0,j,:])[-self.num_beams_per_report:]] = 1
+
+        current_state_masked = torch.mul(to_tensor(current_state), to_tensor(current_state_mask))
+        predicted_beam_qual = self.actor(current_state_masked)   
+        actions = self.actor.select_beams(to_numpy(predicted_beam_qual),self.nb_actions,self.num_beams_per_UE) 
+        return actions
     
     def get_eval_predictor(self):
         eval_predictor = deepcopy(self)
@@ -169,11 +183,22 @@ class BeamPredictionEvaluator(object):
 
     def __call__(self, env:BeamManagementEnv, agent:BeamPredictor, debug=False, visualize=False, save=False):
         masked_mse = []
-        all_mse = []
+        full_mse = []
+        agent_rewards = []
         
         step = episode = episode_steps = 0
         episode_reward = 0.
-        observation = None          
+        observation = None      
+        
+        if env.enable_baseline:
+            baseline_rewards = []
+            episode_baseline_reward = 0
+        if env.enable_exhaustive:
+            exhaustive_rewards = []
+            episode_exhaustive_reward = 0
+        if env.enable_genie:
+            genie_rewards = []
+            episode_genie_reward = 0
         
         if self.use_saved_traj:
             env.set_data_mode(use_saved_trajectory = self.use_saved_traj, num_saved_traj = self.num_episodes)
@@ -188,18 +213,26 @@ class BeamPredictionEvaluator(object):
                 agent.reset(observation)
                 episode_steps = 0
                 episode_masked_mse = 0.
-                episode_all_mse = 0.
+                episode_full_mse = 0.
             # start episode
-            action = np.zeros(env.codebook_size)
-            action[0:env.num_beams_per_UE] = 1
+            action = agent.select_action(observation)
             observation2, reward, done, info = env.step(action)
+            episode_reward += reward
+            
+            if env.enable_baseline:
+                episode_baseline_reward += info['baseline_reward']
+            if env.enable_exhaustive:
+                episode_exhaustive_reward += info['incremental_reward']
+            if env.enable_genie:
+                episode_genie_reward += info['genie_reward']
+                
             observation2 = deepcopy(observation2)
             if self.max_episode_length and episode_steps >= self.max_episode_length -1:
                 done = True
             
-            masked_mse_temp, all_mse_temp = agent.predict(observation, observation2)
+            masked_mse_temp, full_mse_temp = agent.predict(observation, observation2)
             episode_masked_mse += masked_mse_temp
-            episode_all_mse += all_mse_temp
+            episode_full_mse += full_mse_temp
             
             agent.observe(reward, observation2, done)
         
@@ -210,10 +243,17 @@ class BeamPredictionEvaluator(object):
 
             if done: # end of episode
                 masked_mse.append(episode_masked_mse/episode_steps)
-                all_mse.append(episode_all_mse/episode_steps)
+                full_mse.append(episode_full_mse/episode_steps)
+                agent_rewards.append(episode_reward/episode_steps)
+                if env.enable_genie:
+                    genie_rewards.append(episode_genie_reward/episode_steps)
+                if env.enable_baseline:
+                    baseline_rewards.append(episode_baseline_reward/episode_steps)
+                if env.enable_exhaustive:
+                    exhaustive_rewards.append(episode_exhaustive_reward/episode_steps)
                 
                 if debug:
-                    print('Episode#{} Masked MSE={} Full MSE={}'.format(episode,episode_masked_mse/episode_steps,episode_all_mse/episode_steps))
+                    print('Episode#{} Masked MSE={} Full MSE={}'.format(episode,episode_masked_mse/episode_steps,episode_full_mse/episode_steps))
     
                 agent.memory.append(
                     observation,
@@ -224,13 +264,29 @@ class BeamPredictionEvaluator(object):
                 observation = None
                 episode_steps = 0
                 episode_reward = 0.
+                if env.enable_baseline:
+                    episode_baseline_reward = 0
+                if env.enable_exhaustive:
+                    episode_exhaustive_reward = 0
+                if env.enable_genie:
+                    episode_genie_reward = 0
                 episode += 1
         
         # allow env to generate traj
         env.set_data_mode(use_saved_trajectory = False, num_saved_traj = None)
-                
         
-        return masked_mse, all_mse
+        all_results = {}
+        all_results['masked_mse'] = masked_mse
+        all_results['full_mse'] = full_mse
+        all_results['agent_rewards'] = agent_rewards
+        if env.enable_baseline:
+            all_results['baseline_rewards'] = baseline_rewards
+        if env.enable_genie:
+            all_results['genie_rewards'] = genie_rewards        
+        if env.enable_exhaustive:
+            all_results['exhaustive_rewards'] = exhaustive_rewards        
+        
+        return all_results
 
 
         
@@ -248,6 +304,7 @@ def train(num_iterations, agent:BeamPredictor, env:BeamManagementEnv,  evaluate:
     if evaluate is not None:
         eval_masked_mse = []
         eval_full_mse = []
+        eval_rewards = []
         eval_times = []
         
     while step < num_iterations:
@@ -255,9 +312,8 @@ def train(num_iterations, agent:BeamPredictor, env:BeamManagementEnv,  evaluate:
         if observation is None:
             observation = deepcopy(env.reset())
             agent.reset(observation)
-
-        action = np.zeros(env.codebook_size)
-        action[0:env.num_beams_per_UE] = 1
+        
+        action = agent.select_action(observation)
         
         # env response with next_observation, reward, terminate_info
         observation2, reward, done, info = env.step(action)
@@ -278,21 +334,40 @@ def train(num_iterations, agent:BeamPredictor, env:BeamManagementEnv,  evaluate:
             tic = time.time()
             evalagent = agent.get_eval_predictor()
             val_env = deepcopy(env)
+            val_env.enable_baseline = True
+            val_env.enable_genie = True
+            val_env.enable_exhaustive = False
+            if step == num_iterations-1:
+                val_env.enable_exhaustive = True            
             val_env.reset()
-            masked_mse, all_mse = evaluate(val_env, evalagent, debug=False, visualize=False, save = False)
+            all_results = evaluate(val_env, evalagent, debug=False, visualize=False, save = False)
             toc = time.time()
             # if debug: prYellow('[Evaluate] Step_{:07d}: mean_reward:{}'.format(step, validate_reward))
-            print('[Evaluate] Step_{:07d}: time:{} seconds, avg masked mse:{}, avg full mse:{}'.format(step, toc-tic, np.mean(masked_mse), np.mean(all_mse)))
-            eval_masked_mse.append(np.mean(masked_mse))
-            eval_full_mse.append(np.mean(all_mse))
+            print('[Evaluate] Step_{:07d}: time:{} seconds, avg masked mse:{}, avg full mse:{}'.format(step, toc-tic, np.mean(all_results['masked_mse']), np.mean(all_results['full_mse'])))
+            eval_masked_mse.append(np.mean(all_results['masked_mse']))
+            eval_full_mse.append(np.mean(all_results['full_mse']))
+            eval_rewards.append(np.mean(all_results['agent_rewards']))
             eval_times.append(step)
             
             plt.figure()
-            sns.kdeplot(masked_mse,label='masked MSE')
-            sns.kdeplot(all_mse,label='full MSE')
+            sns.kdeplot(all_results['masked_mse'],label='masked MSE')
+            sns.kdeplot(all_results['full_mse'],label='full MSE')
             plt.legend();
-            plt.title('Eval Results after #{} Training Steps'.format(step))
+            plt.title('Eval MSE after #{} Training Steps'.format(step))
             plt.show()
+            
+            plt.figure()
+            sns.kdeplot(all_results['agent_rewards'],label='agent')
+            if val_env.enable_baseline:
+                sns.kdeplot(all_results['baseline_rewards'],label='baseline')
+            if val_env.enable_genie:
+                sns.kdeplot(all_results['genie_rewards'],label='upperbound')
+            if val_env.enable_exhaustive:
+                sns.kdeplot(all_results['exhaustive_rewards'],label='iterative selection with genie')
+            plt.legend();
+            plt.title('Eval Rewards after #{} Training Steps'.format(step))
+            plt.show()
+            
 
 
         # update 
@@ -319,7 +394,7 @@ def train(num_iterations, agent:BeamPredictor, env:BeamManagementEnv,  evaluate:
             episode_reward = 0.
             episode += 1
             
-    all_results = {'eval_masked_mse':eval_masked_mse,'eval_full_mse':eval_full_mse,'eval_times':eval_times,'train_masked_mse':train_masked_mse,'train_full_mse':train_full_mse,'train_times':train_times}
+    all_results = {'eval_masked_mse':eval_masked_mse,'eval_full_mse':eval_full_mse, 'eval_rewards':eval_rewards, 'eval_times':eval_times,'train_masked_mse':train_masked_mse,'train_full_mse':train_full_mse,'train_times':train_times}
     return all_results
 
 if __name__ == "__main__":
@@ -343,7 +418,7 @@ if __name__ == "__main__":
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
     parser.add_argument('--validate_episodes', default=100, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
-    parser.add_argument('--validate_steps', default=5000, type=int, help='how many steps to perform a validate experiment')
+    parser.add_argument('--validate_steps', default=2000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
     parser.add_argument('--train_iter', default=100001, type=int, help='train iters each timestep')
@@ -360,13 +435,14 @@ if __name__ == "__main__":
     parser.add_argument('--enable_baseline',default=False)
     parser.add_argument('--enable_genie',default=False)
     parser.add_argument('--ue_speed',default=10)
-    parser.add_argument('--full_observation', default=False)
+    parser.add_argument('--full_observation', default=True)
     parser.add_argument('--conv2d_1_kernel_size',type=int,default=5)
     parser.add_argument('--conv2d_2_kernel_size',type=int,default=3)
     parser.add_argument('--oversampling_factor',type=int,default=1)
     parser.add_argument('--num_antennas',type=int,default=64)
     parser.add_argument('--use_saved_traj_in_validation',default=False)
     parser.add_argument('--actor_lambda',type=float,default=0.5)
+    parser.add_argument('--num_beams_per_report',type=int,default=4)
     
     parser.add_argument('--debug', default = False, dest='debug')
 
@@ -422,8 +498,11 @@ if __name__ == "__main__":
         plt.plot(rewards['train_times'],rewards['train_masked_mse'], label = 'train masked mse')
         plt.legend();
         plt.figure()
-        plt.plot(rewards['eval_times'],rewards['eval_masked_mse'], label = 'train masked mse')
-        plt.plot(rewards['eval_times'],rewards['eval_masked_mse'], label = 'train masked mse')
+        plt.plot(rewards['eval_times'],rewards['eval_masked_mse'], label = 'eval masked mse')
+        plt.plot(rewards['eval_times'],rewards['eval_masked_mse'], label = 'eval masked mse')
+        plt.legend();
+        plt.figure()
+        plt.plot(rewards['eval_times'],rewards['eval_rewards'], label = 'eval rewards')
         plt.legend();
         
         # plt.figure()
