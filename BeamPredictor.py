@@ -108,8 +108,10 @@ class BeamPredictor(object):
         
         current_state_masked = torch.mul(to_tensor(current_state), to_tensor(current_state_mask))
         predicted_beam_qual = self.actor(current_state_masked)
+        predicted_beaM_qual_arr = to_numpy(predicted_beam_qual)
         predicted_beam_qual_masked = torch.mul(predicted_beam_qual, to_tensor(next_observation_mask))
         true_beam_qual = to_tensor(next_observation)
+        true_beam_qual_arr = to_numpy(true_beam_qual)
         true_beam_qual_masked = torch.mul(true_beam_qual, to_tensor(next_observation_mask))
         masked_mse = criterion(predicted_beam_qual_masked, true_beam_qual_masked)
         full_mse = criterion(predicted_beam_qual, true_beam_qual)
@@ -442,7 +444,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_antennas',type=int,default=64)
     parser.add_argument('--use_saved_traj_in_validation',default=False)
     parser.add_argument('--actor_lambda',type=float,default=0.5)
-    parser.add_argument('--num_beams_per_report',type=int,default=4)
+    parser.add_argument('--num_beams_per_report',type=int,default=64)
     
     parser.add_argument('--debug', default = False, dest='debug')
 
@@ -495,11 +497,11 @@ if __name__ == "__main__":
         
         plt.figure()
         plt.plot(rewards['train_times'],rewards['train_masked_mse'], label = 'train masked mse')
-        plt.plot(rewards['train_times'],rewards['train_masked_mse'], label = 'train masked mse')
+        plt.plot(rewards['train_times'],rewards['train_full_mse'], label = 'train full mse')
         plt.legend();
         plt.figure()
         plt.plot(rewards['eval_times'],rewards['eval_masked_mse'], label = 'eval masked mse')
-        plt.plot(rewards['eval_times'],rewards['eval_masked_mse'], label = 'eval masked mse')
+        plt.plot(rewards['eval_times'],rewards['eval_full_mse'], label = 'eval full mse')
         plt.legend();
         plt.figure()
         plt.plot(rewards['eval_times'],rewards['eval_rewards'], label = 'eval rewards')
