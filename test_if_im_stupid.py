@@ -59,7 +59,7 @@ if __name__ == "__main__":
     env = BeamManagementEnv(num_antennas = 64,
                             oversampling_factor = 1, 
                             num_beams_per_UE = 8,
-                            ue_speed = 15, 
+                            ue_speed = 10, 
                             enable_baseline = True, 
                             enable_genie = True,
                             enable_exhaustive = True,

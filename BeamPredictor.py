@@ -128,7 +128,7 @@ class BeamPredictor(object):
         current_state_masked = torch.mul(to_tensor(current_state), to_tensor(current_state_mask))
         predicted_beam_qual = self.actor(current_state_masked)   
         actions = self.actor.select_beams(to_numpy(predicted_beam_qual),self.nb_actions,self.num_beams_per_UE) 
-        return actions
+        return np.squeeze(actions)
     
     def get_eval_predictor(self):
         eval_predictor = deepcopy(self)
@@ -211,14 +211,21 @@ class BeamPredictionEvaluator(object):
         while episode < self.num_episodes:
             if observation is None:
                 # reset at the start of episode
-                observation = deepcopy(env.reset())
+                observation, info = deepcopy(env.reset())
                 agent.reset(observation)
                 episode_steps = 0
                 episode_masked_mse = 0.
                 episode_full_mse = 0.
             # start episode
             action = agent.select_action(observation)
+            # ob_temp = np.array([info['next_observation']])
+            # action = np.squeeze(agent.actor.select_beams(np.array([info['next_observation']]),64,8))
             observation2, reward, done, info = env.step(action)
+            
+            # #debug
+            # action_broadcasted = np.repeat(action,env.num_measurements,axis=0)
+            # observation2 = np.multiply(observation2,action_broadcasted)
+        
             episode_reward += reward
             
             if env.enable_baseline:
@@ -312,13 +319,18 @@ def train(num_iterations, agent:BeamPredictor, env:BeamManagementEnv,  evaluate:
     while step < num_iterations:
         # reset if it is the start of episode
         if observation is None:
-            observation = deepcopy(env.reset())
+            observation,info = deepcopy(env.reset())
             agent.reset(observation)
         
         action = agent.select_action(observation)
         
         # env response with next_observation, reward, terminate_info
         observation2, reward, done, info = env.step(action)
+        
+        # # debug
+        # action_broadcasted = np.repeat(action,env.num_measurements,axis=0)
+        # observation2 = np.multiply(observation2,action_broadcasted)
+        
         observation2 = deepcopy(observation2)
         if max_episode_length and episode_steps >= max_episode_length -1:
             done = True
@@ -444,7 +456,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_antennas',type=int,default=64)
     parser.add_argument('--use_saved_traj_in_validation',default=False)
     parser.add_argument('--actor_lambda',type=float,default=0.5)
-    parser.add_argument('--num_beams_per_report',type=int,default=64)
+    parser.add_argument('--num_beams_per_report',type=int,default=16)
     
     parser.add_argument('--debug', default = False, dest='debug')
 
@@ -455,6 +467,7 @@ if __name__ == "__main__":
 
     # env = NormalizedEnv(gym.make(args.env))
     # env = BeamManagementEnv(enable_baseline = True, enable_genie = True)
+    print('Num Beams per Report = {}'.format(args.num_beams_per_report))
     env = BeamManagementEnv(num_antennas = args.num_antennas,
                             oversampling_factor = args.oversampling_factor, 
                             num_beams_per_UE = args.num_beams_per_UE,

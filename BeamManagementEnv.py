@@ -553,7 +553,11 @@ class BeamManagementEnv(gym.Env):
         # assigned_bf_gains = self.measure_beams_single_UE(self.current_h_idc, self.assigned_beams_per_UE)
         # beam_report = np.zeros((self.codebook_size))
         # beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
-        
+
+        if self.full_observation:
+            info['next_observation'] = self._get_full_observation()
+        else:
+            info['next_observation'] = self._get_observation()        
             
         # update baseline beams (used in next time step) that's centered around the best beam in the last h in this segment
         if self.enable_baseline:
@@ -740,6 +744,12 @@ class BeamManagementEnv(gym.Env):
         # assigned_bf_gains = self.measure_beams_single_UE(self.current_h_idc, self.assigned_beams_per_UE)
         # beam_report = np.zeros((self.codebook_size))
         # beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
+        info={}
+        if self.full_observation:
+            info['next_observation'] = self._get_full_observation()
+        else:
+            info['next_observation'] = self._get_observation()
+            
         if self.enable_baseline:
             # baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
             #spatial moving window baseline
@@ -750,7 +760,7 @@ class BeamManagementEnv(gym.Env):
             # self.baseline_beams = self.prophet_baseline()   
             
             
-        return observation
+        return observation, info
     
     def prophet_baseline(self):
         #baseline where the full observation in the next time step is known
