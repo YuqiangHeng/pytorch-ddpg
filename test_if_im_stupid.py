@@ -23,7 +23,7 @@ import time
 import seaborn as sns
 from tqdm import tqdm
 
-def pick_beams(observation:np.ndarray, num_beams_per_UE, nb_actions):
+def iterative_selection(observation:np.ndarray, num_beams_per_UE, nb_actions):
     #observation is num_measurements x num_beams matrix, iteratively pick best beam
     # selected_beams = np.argsort(np.sum(observation,axis=0))[-num_beams_per_UE:]
     
@@ -36,21 +36,16 @@ def pick_beams(observation:np.ndarray, num_beams_per_UE, nb_actions):
         pool.remove(temp_b)
     
     binary_beams = np.zeros(nb_actions)
-    binary_beams[np.array(selected_beams)] = 1
+    binary_beams[np.array(selected_beams)] = 1        
+    return binary_beams
+
+def top_k_selection(observation:np.ndarray, num_beams_per_UE, nb_actions):
+    #observation is num_measurements x num_beams matrix, iteratively pick best beam
+    # selected_beams = np.argsort(np.sum(observation,axis=0))[-num_beams_per_UE:]
     
-    # selected_beams = []
-    # pool = list(np.arange(self.nb_actions))
-    # sum_tp = np.sum(observation,axis=0)
-    # sel_beam = np.argmax(sum_tp)
-    # selected_beams.append(sel_beam)
-    # pool.remove(sel_beam)
-    
-    # for it_idx in range(self.num_beams_per_UE):
-    #     sum_tp = np.sum(observation[pool,:],axis=0)
-    #     sel_beam = np.argmax(sum_tp)
-    #     selected_beams.append(sel_beam)
-    #     pool.remove(sel_beam)
-        
+    selected_beams = np.argsort(np.sum(observation,axis=0))[-num_beams_per_UE:]
+    binary_beams = np.zeros(nb_actions)
+    binary_beams[np.array(selected_beams)] = 1        
     return binary_beams
     
     
@@ -70,36 +65,60 @@ if __name__ == "__main__":
     nb_states = env.observation_space.shape[0]
     nb_actions = env.action_space.shape[0]
     
-    num_epoch = int(1e3)
+    num_epoch = int(5e2)
     baseline = []
     genie = []
-    exhaustive = []
+    iterative = []
+    random = []
     test = []
+    top_k = []
+    top_k_genie = []
+    top_k_gap = []
     
     for epi in tqdm(range(num_epoch)):        
         done = False
-        baseline_epi = genie_epi = exhaustive_epi = test_epi = epi_step = 0
-        ob = env.reset()
-        prev_ob = ob
+        baseline_epi = genie_epi = iterative_epi = test_epi = random_epi = top_k_epi = top_k_genie_epi = epi_step = 0
+        # ob = env.reset()
+        ob, info = env.reset()
+        # prev_ob = ob
         while not done:    
-            action = pick_beams(ob, 8, nb_actions)
+            print(env.ue_traveled_dist_next)
+            action = iterative_selection(info['next_observation'], env.num_beams_per_UE, nb_actions)
+            random_beams = np.random.choice(np.arange(env.codebook_size),env.num_beams_per_UE,replace=False)
+            random_epi += env._calc_reward(random_beams)[0]
+            top_k_genie_r = env._calc_reward(np.nonzero(top_k_selection(info['next_observation'],env.num_beams_per_UE,nb_actions))[0])[0]
+            top_k_genie_epi += top_k_genie_r
+            top_k_epi += env._calc_reward(np.nonzero(top_k_selection(ob,env.num_beams_per_UE,nb_actions))[0])[0]
             # action = np.zeros(nb_actions)
             # action[np.argsort(ob)[-8:]] = 1
             ob, r, done, info = env.step(action)
             baseline_epi += info['baseline_reward']
             genie_epi += info['genie_reward']
-            exhaustive_epi += info['incremental_reward']
+            iterative_epi += info['incremental_reward']
+            top_k_gap.append(info['genie_reward']-top_k_genie_r)
+            if info['genie_reward']-top_k_genie_r < 0:
+                print('ahh')
             test_epi += r
             epi_step += 1
         baseline.append(baseline_epi/epi_step)
         genie.append(genie_epi/epi_step)
-        exhaustive.append(exhaustive_epi/epi_step)
+        iterative.append(iterative_epi/epi_step)
+        random.append(random_epi/epi_step)
         test.append(test_epi/epi_step)
+        top_k_genie.append(top_k_genie_epi/epi_step)
+        top_k.append(top_k_epi/epi_step)
     
     plt.figure()
     sns.kdeplot(test,label='iterative selection with perfect predictor')
     sns.kdeplot(baseline,label='baseline')
     sns.kdeplot(genie,label='upperbound')
-    sns.kdeplot(exhaustive,label='iterative selection with genie')
-    plt.legend();    
+    sns.kdeplot(iterative,label='iterative selection with genie')
+    sns.kdeplot(random,label='random selection')
+    sns.kdeplot(top_k,label='top k selection')
+    sns.kdeplot(top_k_genie,label='top k selection with genie')
+    plt.legend();  
+    
+    plt.figure()
+    sns.kdeplot(top_k_gap,label='top_k_gap')
+
     

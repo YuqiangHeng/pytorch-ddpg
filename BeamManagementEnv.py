@@ -419,19 +419,20 @@ class BeamManagementEnv(gym.Env):
         # self.assigned_beams_per_UE = np.argsort(action)[-self.num_beams_per_UE:]
         info = {}
         #get reward
-        self.ue_traveled_dist_next = (self.t+1)*self.ue_speed
-        episode_end = False
-        if self.ue_traveled_dist_next >= max(self.traj_point_distances):
-            self.ue_traveled_dist_next = max(self.traj_point_distances)
-            episode_end = True
-        self.total_segment_length = self.ue_traveled_dist_next - self.ue_traveled_distance
-        idc_in_traj_covered = np.nonzero(np.logical_and(self.traj_point_distances > self.ue_traveled_distance, self.traj_point_distances < self.ue_traveled_dist_next))[0] #idc of points in traj in the segment
-#        print(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])
-        # if len(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0]) == 0:
-        #     print('ohh')
-        prev_h_idc_in_traj = min(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])-1
-        self.h_idc_in_traj_covered = np.insert(idc_in_traj_covered,0,prev_h_idc_in_traj) #idc of h (local idc) in traj, including starting h (last point in prev segment)
-        self.h_idc_covered = self.traj[self.h_idc_in_traj_covered] #global idc
+        # self.ue_traveled_dist_next = (self.t+1)*self.ue_speed
+        # episode_end = False
+        # if self.ue_traveled_dist_next >= max(self.traj_point_distances):
+        #     self.ue_traveled_dist_next = max(self.traj_point_distances)
+        #     episode_end = True
+#         self.total_segment_length = self.ue_traveled_dist_next - self.ue_traveled_distance
+#         idc_in_traj_covered = np.nonzero(np.logical_and(self.traj_point_distances > self.ue_traveled_distance, self.traj_point_distances < self.ue_traveled_dist_next))[0] #idc of points in traj in the segment
+# #        print(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])
+#         # if len(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0]) == 0:
+#         #     print('ohh')
+#         prev_h_idc_in_traj = min(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])-1
+#         self.h_idc_in_traj_covered = np.insert(idc_in_traj_covered,0,prev_h_idc_in_traj) #idc of h (local idc) in traj, including starting h (last point in prev segment)
+#         self.h_idc_covered = self.traj[self.h_idc_in_traj_covered] #global idc
+        
         reward, beams_used = self._calc_reward(self.assigned_beams_per_UE)
         # if len(h_idc_covered) == 1:
         #     # H doesnt change within the segment
@@ -548,35 +549,37 @@ class BeamManagementEnv(gym.Env):
             observation = self._get_full_observation()
         else:
             observation = self._get_observation()
-                                         
-        self._time_increment()
-        # assigned_bf_gains = self.measure_beams_single_UE(self.current_h_idc, self.assigned_beams_per_UE)
-        # beam_report = np.zeros((self.codebook_size))
-        # beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
-
-        if self.full_observation:
-            info['next_observation'] = self._get_full_observation()
-        else:
-            info['next_observation'] = self._get_observation()        
-            
-        # update baseline beams (used in next time step) that's centered around the best beam in the last h in this segment
-        if self.enable_baseline:
-            # # update baseline beamset every step to center around max
-            # baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
-            # self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
-            
-            #Alternative: UE measures entire codebook and reports top-k: calculate new max of entire codebook, update beamset if new max not in current beamset
-            baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
-            if not baseline_max_beam in self.baseline_beams:
-                self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)
         
-        # if self.combine_state:
-        #     observation = np.concatenate((beam_report,action),axis=0)
-        # else:
-        #     observation = beam_report
+        if not self.episode_end:
+                                 
+            self._time_increment()
+            # assigned_bf_gains = self.measure_beams_single_UE(self.current_h_idc, self.assigned_beams_per_UE)
+            # beam_report = np.zeros((self.codebook_size))
+            # beam_report[self.assigned_beams_per_UE] = assigned_bf_gains
+    
+            if self.full_observation:
+                info['next_observation'] = self._get_full_observation()
+            else:
+                info['next_observation'] = self._get_observation()        
+                
+            # update baseline beams (used in next time step) that's centered around the best beam in the last h in this segment
+            if self.enable_baseline:
+                # # update baseline beamset every step to center around max
+                # baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
+                # self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
+                
+                #Alternative: UE measures entire codebook and reports top-k: calculate new max of entire codebook, update beamset if new max not in current beamset
+                baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
+                if not baseline_max_beam in self.baseline_beams:
+                    self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)
+            
+            # if self.combine_state:
+            #     observation = np.concatenate((beam_report,action),axis=0)
+            # else:
+            #     observation = beam_report
 
         
-        return observation, reward, episode_end, info
+        return observation, reward, self.episode_end, info
 
     def _calc_reward(self, selected_beams):
         #calculate the sum spetral efficiency of selected beams (integrate over time of SPE of best beams) over the h_indices
@@ -589,14 +592,14 @@ class BeamManagementEnv(gym.Env):
             # H doesnt change within the segment
             segment_bf_gains = self.measure_beams_single_UE(self.h_idc_covered[0], selected_beams)
             reward = np.log2(1+10**(max(segment_bf_gains)/10))
-            beam = np.argmax(segment_bf_gains)
+            beam = selected_beams[np.argmax(segment_bf_gains)]
             beams_used.append(beam)
         else:
             reward = 0
             for i in range(len(self.h_idc_covered)):
                 segment_bf_gains = self.measure_beams_single_UE(self.h_idc_covered[i], selected_beams)
                 segment_achievable_rate = np.log2(1+10**(max(segment_bf_gains)/10))
-                beams_used.append(np.argmax(segment_bf_gains))
+                beams_used.append(selected_beams[np.argmax(segment_bf_gains)])
                 if i == 0:
                     segment_end = self.traj_point_distances[self.h_idc_in_traj_covered[i+1]]
                     segment_start = self.ue_traveled_distance
@@ -685,6 +688,7 @@ class BeamManagementEnv(gym.Env):
             self.reward_log['exhaustive'] = []
         
         self.traj, self.traj_pos, self.traj_edge_lengths, self.traj_total_len, self.traj_point_distances = self.get_trajectory()
+        self.episode_end = False
         # self.traj = self.get_trajectory()
         # self.traj_pos = self.ue_loc[self.traj]
         # self.traj_edge_lengths = np.linalg.norm(np.diff(self.traj_pos, axis=0),axis=1)
@@ -694,7 +698,7 @@ class BeamManagementEnv(gym.Env):
         self.current_idc_in_traj = max(np.nonzero(self.traj_point_distances <= self.ue_traveled_distance)[0])
         self.current_h_idc = self.traj[self.current_idc_in_traj]
         self.assigned_beams_per_UE, assigned_bf_gains = self.get_initial_beam_assignment() #assign initial beams with genie action
-                
+                        
         # initial_beams = np.zeros((self.codebook_size))
         # initial_beams[self.assigned_beams_per_UE] = 1
         if self.enable_baseline:
@@ -806,6 +810,20 @@ class BeamManagementEnv(gym.Env):
         self.ue_traveled_distance = self.t*self.ue_speed
         self.current_idc_in_traj = max(np.nonzero(self.traj_point_distances < self.ue_traveled_distance)[0])
         self.current_h_idc = self.traj[self.current_idc_in_traj]
+        
+                # optional: calculate h indices from t=0 to t=1
+        self.ue_traveled_dist_next = (self.t+1)*self.ue_speed
+        if self.ue_traveled_dist_next >= max(self.traj_point_distances):
+            self.ue_traveled_dist_next = max(self.traj_point_distances)
+            self.episode_end = True
+        self.total_segment_length = self.ue_traveled_dist_next - self.ue_traveled_distance
+        idc_in_traj_covered = np.nonzero(np.logical_and(self.traj_point_distances > self.ue_traveled_distance, self.traj_point_distances < self.ue_traveled_dist_next))[0] #idc of points in traj in the segment
+#        print(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])
+        # if len(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0]) == 0:
+        #     print('ohh')
+        prev_h_idc_in_traj = min(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])-1
+        self.h_idc_in_traj_covered = np.insert(idc_in_traj_covered,0,prev_h_idc_in_traj) #idc of h (local idc) in traj, including starting h (last point in prev segment)
+        self.h_idc_covered = self.traj[self.h_idc_in_traj_covered] #global idc
         
     def _get_observation(self):
         """

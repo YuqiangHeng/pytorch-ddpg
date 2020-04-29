@@ -156,7 +156,7 @@ class BeamSelectionEvaluator(object):
         while episode < self.num_episodes:
             if observation is None:
                 # reset at the start of episode
-                observation = deepcopy(env.reset())
+                observation,info = deepcopy(env.reset())
                 agent.reset(observation)
                 episode_steps = 0
                 episode_reward = 0.

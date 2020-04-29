@@ -36,7 +36,7 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
     while step < num_iterations:
         # reset if it is the start of episode
         if observation is None:
-            observation = deepcopy(env.reset())
+            observation, info = deepcopy(env.reset())
             agent.reset(observation)
 
         # agent pick action ...
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     parser.add_argument('--rate', default=0.001, type=float, help='learning rate')
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
     parser.add_argument('--warmup', default=100, type=int, help='time without training but only filling the replay memory')
-    parser.add_argument('--discount', default=0.5, type=float, help='')
+    parser.add_argument('--discount', default=0.0, type=float, help='')
     parser.add_argument('--bsize', default=128, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=60000, type=int, help='memory size')
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     parser.add_argument('--validate_steps', default=5000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=20001, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=10001, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
