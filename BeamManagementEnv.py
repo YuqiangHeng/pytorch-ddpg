@@ -16,7 +16,7 @@ from gym.utils import seeding
 import itertools
 import time
 from tqdm import tqdm
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 #from Utils import alpha_shape
 
 h_imag_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_imag.npy"
@@ -130,6 +130,31 @@ ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
 #    while not end_of_trajectory:
 #        if turn_complete:
 
+# def gen_trajectory(neighbor_points,boundary_points,boundary_neighbor_mid_dir):
+#     trajectory = []
+#     start_idx = np.random.randint(len(boundary_points))
+#     start =  boundary_points[start_idx]
+#     trajectory.append(start)
+#     #available_dirs = np.nonzero(neighbor_points[start,:])[0]
+#     #move_dir = np.random.choice(available_dirs)
+#     move_dir = int(np.floor(boundary_neighbor_mid_dir[start_idx]))
+#     current_point = start
+#     while True:
+#         current_point = int(neighbor_points[current_point,move_dir]-1)
+#         trajectory.append(current_point)
+#         if current_point in boundary_points:
+#             break
+#         available_dirs = np.nonzero(neighbor_points[current_point,:])[0]
+#         prob = np.zeros(8)
+#         assert(move_dir in available_dirs)
+#         assert(int(np.mod(move_dir-1,8)) in available_dirs)
+#         assert(int(np.mod(move_dir+1,8)) in available_dirs)
+#         prob[move_dir] =0.95
+#         prob[int(np.mod(move_dir-1,8))] = 0.025
+#         prob[int(np.mod(move_dir+1,8))] = 0.025
+#         move_dir= np.random.choice(available_dirs,p=prob)    
+#     return trajectory 
+
 def gen_trajectory(neighbor_points,boundary_points,boundary_neighbor_mid_dir):
     trajectory = []
     start_idx = np.random.randint(len(boundary_points))
@@ -142,17 +167,25 @@ def gen_trajectory(neighbor_points,boundary_points,boundary_neighbor_mid_dir):
     while True:
         current_point = int(neighbor_points[current_point,move_dir]-1)
         trajectory.append(current_point)
-        if current_point in boundary_points:
-            break
         available_dirs = np.nonzero(neighbor_points[current_point,:])[0]
         prob = np.zeros(8)
-        assert(move_dir in available_dirs)
-        assert(int(np.mod(move_dir-1,8)) in available_dirs)
-        assert(int(np.mod(move_dir+1,8)) in available_dirs)
-        prob[move_dir] =0.95
-        prob[int(np.mod(move_dir-1,8))] = 0.025
-        prob[int(np.mod(move_dir+1,8))] = 0.025
-        move_dir= np.random.choice(available_dirs,p=prob)    
+        if current_point in boundary_points:
+            current_point_idx = np.where(boundary_points == current_point)
+            mid_dir = int(np.floor(boundary_neighbor_mid_dir[current_point_idx]))
+            assert(mid_dir in available_dirs)
+            # move_dir = mid_dir
+            prob[available_dirs] = 0.5/(len(available_dirs)-1)
+            prob[mid_dir] = 0.5
+            if np.random.rand() > 0.95:
+                break     
+        else:
+            assert(move_dir in available_dirs)
+            assert(int(np.mod(move_dir-1,8)) in available_dirs)
+            assert(int(np.mod(move_dir+1,8)) in available_dirs)
+            prob[move_dir] =0.95
+            prob[int(np.mod(move_dir-1,8))] = 0.025
+            prob[int(np.mod(move_dir+1,8))] = 0.025
+        move_dir= np.random.choice(np.arange(8),p=prob)    
     return trajectory 
 
 #traj_len = [len(gen_trajectory()) for i in range(1000)]
@@ -674,6 +707,14 @@ class BeamManagementEnv(gym.Env):
         baseline_beamset = self.prophet_baseline()
         
         self.baseline_beams = baseline_beamset
+        
+    def show_trajectory(self):
+        plt.figure()
+        plt.scatter(self.traj_pos[:,0],self.traj_pos[:,1])
+        plt.xlabel('x (meters)')
+        plt.ylabel('y (meters)')
+        plt.title('Current UE Trajectory')
+        plt.show()
             
     def reset(self):
         # self.ue_speed = 5 
@@ -922,12 +963,14 @@ class BeamManagementEnv(gym.Env):
 
         
  
-# if __name__ == "__main__":
-#     env = BeamManagementEnv(num_antennas=16, ue_speed=15, enable_exhaustive=True)
-#     env.reset()
-#     a = np.zeros(16)
-#     a[8:] = 1
-#     env.step(a)    
+if __name__ == "__main__":
+    env = BeamManagementEnv(num_antennas=64, ue_speed=15, enable_exhaustive=True)
+    env.reset()
+    a = np.zeros(16)
+    env.show_trajectory()
+    print(len(env.traj))
+    # a[8:] = 1
+    # env.step(a)    
 
 # if __name__ == "__main__":
 #     env = BeamManagementEnv()

@@ -223,9 +223,9 @@ if __name__ == '__main__':
     parser.add_argument('--oversampling_factor',type=int,default=1)
     parser.add_argument('--num_antennas',type=int,default=64)
     parser.add_argument('--lr',type=float,default=1e-3)
-    parser.add_argument('--validate_episodes', default=100, type=int, help='how many episode to perform during validate experiment')
+    parser.add_argument('--validate_episodes', default=50, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
-    parser.add_argument('--validate_steps', default=1000, type=int, help='how many steps to perform a validate experiment')
+    parser.add_argument('--validate_steps', default=10000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--train_iter', default=int(1e6+1), type=int, help='train iters each timestep')
     parser.add_argument('--debug', default = True, dest='debug')
         
