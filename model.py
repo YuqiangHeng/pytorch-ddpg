@@ -490,16 +490,16 @@ class ConvAutoEncoder(nn.Module):
         decoded = self.deconv2(decoded)
         return decoded.squeeze(1)
         
-# class IteractiveActor(nn.Module):
-#     def __init__(self, nb_states，nb_actions, window_len, num_measurements):
-#         super().__init__()
-#         self.nb_states = nb_states
-#         self.nb_actions = nb_actions
-#         self.window_len = window_len
-#         self.num_measurements = num_measurements
-#         self.input_shape = (self.window_len * self.num_measurements, nb_states)
+class SubActionActor(nn.Module):
+    def __init__(self, nb_states，nb_actions, window_len, num_measurements):
+        super().__init__()
+        self.nb_states = nb_states
+        self.nb_actions = nb_actions
+        self.window_len = window_len
+        self.num_measurements = num_measurements
+        self.input_shape = (self.window_len * self.num_measurements, nb_states)
         
-#     def forward(self):
+    def forward(self):
         
         
 

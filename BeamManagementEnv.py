@@ -466,7 +466,8 @@ class BeamManagementEnv(gym.Env):
 #         self.h_idc_in_traj_covered = np.insert(idc_in_traj_covered,0,prev_h_idc_in_traj) #idc of h (local idc) in traj, including starting h (last point in prev segment)
 #         self.h_idc_covered = self.traj[self.h_idc_in_traj_covered] #global idc
         
-        reward, beams_used = self._calc_reward(self.assigned_beams_per_UE)
+        reward, beams_used, beams_spe = self._calc_reward(self.assigned_beams_per_UE)
+        info['beams_spe'] = beams_spe
         # if len(h_idc_covered) == 1:
         #     # H doesnt change within the segment
         #     segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.assigned_beams_per_UE)
@@ -490,7 +491,7 @@ class BeamManagementEnv(gym.Env):
         self.reward_log['agent'].append(reward)
 
         if self.enable_baseline:
-            baseline_reward, baseline_beams_used = self._calc_reward(self.baseline_beams)
+            baseline_reward, baseline_beams_used, baseline_beams_spe = self._calc_reward(self.baseline_beams)
             # if len(h_idc_covered) == 1:
             #     # H doesnt change within the segment
             #     baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.baseline_beams)
@@ -516,7 +517,7 @@ class BeamManagementEnv(gym.Env):
             info['baseline_beams'] = self.baseline_beams
         
         if self.enable_genie:
-            genie_reward, genie_beams_used = self._calc_reward(np.arange(self.codebook_size))
+            genie_reward, genie_beams_used, genie_beams_spe = self._calc_reward(np.arange(self.codebook_size))
             # info['genie_beams'] = []
             # if len(h_idc_covered) == 1:
             #     # H doesnt change within the segment
@@ -621,18 +622,24 @@ class BeamManagementEnv(gym.Env):
         #total segment_length: literal
         #selected_beams: an array of index of beams, not binary vector
         beams_used = []
+        beams_spe = np.zeros(np.array(selected_beams).squeeze().shape)
         if len(self.h_idc_covered) == 1:
             # H doesnt change within the segment
             segment_bf_gains = self.measure_beams_single_UE(self.h_idc_covered[0], selected_beams)
-            reward = np.log2(1+10**(max(segment_bf_gains)/10))
-            beam = selected_beams[np.argmax(segment_bf_gains)]
+            beam_spe = np.log2(1+10**(max(segment_bf_gains)/10))
+            reward = beam_spe
+            beam_idx = np.argmax(segment_bf_gains)
+            beam = selected_beams[beam_idx]
             beams_used.append(beam)
+            beams_spe[beam_idx] += beam_spe
         else:
             reward = 0
             for i in range(len(self.h_idc_covered)):
                 segment_bf_gains = self.measure_beams_single_UE(self.h_idc_covered[i], selected_beams)
                 segment_achievable_rate = np.log2(1+10**(max(segment_bf_gains)/10))
-                beams_used.append(selected_beams[np.argmax(segment_bf_gains)])
+                beam_idx = np.argmax(segment_bf_gains)
+                beam = selected_beams[beam_idx]
+                beams_used.append(beam)
                 if i == 0:
                     segment_end = self.traj_point_distances[self.h_idc_in_traj_covered[i+1]]
                     segment_start = self.ue_traveled_distance
@@ -642,8 +649,9 @@ class BeamManagementEnv(gym.Env):
                 if i > 0 and i < len(self.h_idc_covered)-1:
                     segment_start = self.traj_point_distances[self.h_idc_in_traj_covered[i]]
                     segment_end = self.traj_point_distances[self.h_idc_in_traj_covered[i+1]]
-                reward += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length      
-        return reward, beams_used
+                reward += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
+                beams_spe[beam_idx] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
+        return reward, beams_used, beams_spe
   
         
     
