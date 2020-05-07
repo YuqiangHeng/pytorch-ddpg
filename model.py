@@ -490,6 +490,21 @@ class ConvAutoEncoder(nn.Module):
         decoded = self.deconv2(decoded)
         return decoded.squeeze(1)
         
+class SubActionNN(nn.Module):
+    def __init__(self, nb_states):
+        self.inputdim = nb_states
+        self.hidden1_dim = int(nb_states/2)
+        self.hidden2_dim = int(nb_states/4)
+        self.fc1 = nn.Sequential(nn.Linear(self.inputdim,self.hidden1_dim), nn.ReLU())
+        self.fc2 = nn.Sequential(nn.Linear(self.hidden1_dim,self.hidden2_dim), nn.ReLU())
+        self.fc3 = nn.Sequential(nn.Linear(self.hidden2_dim,1), nn.Sigmoid())
+    
+    def forward(self,x):
+        out = self.fc1(x)
+        out = self.fc2(out)
+        out = self.fc3(out)
+        return out
+    
 class SubActionActor(nn.Module):
     def __init__(self, nb_states，nb_actions, window_len, num_measurements):
         super().__init__()
@@ -498,8 +513,46 @@ class SubActionActor(nn.Module):
         self.window_len = window_len
         self.num_measurements = num_measurements
         self.input_shape = (self.window_len * self.num_measurements, nb_states)
+        self.lstm = nn.LSTM(input_size = self.nb_states, hidden_size = self.nb_states, num_layers = 2, batch_first=True, dropout = 0.2)
+        self.fc_out_dim = int(self.nb_states/2)
+        self.fc = nn.Sequential(nn.Linear(self.nb_states,self.fc_out_dim), nn.ReLU())
+        self.sub_action_nns = [SubActionNN(self.nb_states) for i in range(self.nb_actions)]
+                
+    def forward(self, x):
+        out, hidden = self.lstm(x)
+        sub_action_out = []
+        for nn in self.sub_action_nns:
+            sub_action_score = nn(out)
+            sub_action_out.append(sub_action_out)
+        return sub_action_out
+    
+    def select_beams(self, x, nb_actions, n):
+        bsize = x.shape[0]
+        binary_beams = np.zeros((bsize, nb_actions))
+        for i in range(bsize):
+            sel = np.argsort(x[i])[-n:]
+            binary_beams[i,sel] = 1
+        return binary_beams
         
-    def forward(self):
+class SubActionCritic(nn.Module):
+    def __init__(self, nb_states，nb_actions, window_len, num_measurements):
+        super().__init__()
+        self.nb_states = nb_states
+        self.nb_actions = nb_actions
+        self.window_len = window_len
+        self.num_measurements = num_measurements
+        self.input_shape = (self.window_len * self.num_measurements, nb_states)
+        self.lstm = nn.LSTM(input_size = self.nb_states, hidden_size = self.nb_states, num_layers = 2, batch_first=True, dropout = 0.2)
+        self.fc_out_dim = int(self.nb_states/2)
+        self.fc = nn.Sequential(nn.Linear(self.nb_states,self.fc_out_dim), nn.ReLU())
+        self.sub_action_nns = [SubActionNN(self.nb_states) for i in range(self.nb_actions)]
+        
+    def forward(self, x):
+        s,a = x
+        lstm_out, lstm_hidden = self.lstm(s)
+        for i in np.nonzeros(a)
+        
+        
         
         
 
