@@ -5,6 +5,7 @@ from scipy.io import savemat
 from memory import BeamSpaceSequentialMemory
 from util import *
 from Autoencoder_DDPG import Autoencoder_DDPG
+from SubActionDDPG import SubAction_DDPG
 from copy import deepcopy
 import torch
 
@@ -166,8 +167,11 @@ class BeamSelectionEvaluator(object):
             observation2 = deepcopy(observation2)
             if self.max_episode_length and episode_steps >= self.max_episode_length -1:
                 done = True
-                
-            agent.observe(reward, observation2, done)
+            
+            if isinstance(agent, SubAction_DDPG):
+                agent.observe(info['beams_spe'], reward, observation2, done)
+            else:
+                agent.observe(reward, observation2, done)
         
             #update
             step += 1

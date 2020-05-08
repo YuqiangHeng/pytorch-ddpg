@@ -492,6 +492,7 @@ class ConvAutoEncoder(nn.Module):
         
 class SubActionNN(nn.Module):
     def __init__(self, nb_states):
+        super().__init__()
         self.inputdim = nb_states
         self.hidden1_dim = int(nb_states/2)
         self.hidden2_dim = int(nb_states/4)
@@ -506,11 +507,12 @@ class SubActionNN(nn.Module):
         return out
     
 class SubActionActor(nn.Module):
-    def __init__(self, nb_states，nb_actions, window_len, num_measurements):
+    def __init__(self, nb_states, nb_actions, window_len, num_measurements):
         super().__init__()
         self.nb_states = nb_states
         self.nb_actions = nb_actions
         self.window_len = window_len
+        self.outshape = nb_actions
         self.num_measurements = num_measurements
         self.input_shape = (self.window_len * self.num_measurements, nb_states)
         self.lstm = nn.LSTM(input_size = self.nb_states, hidden_size = self.nb_states, num_layers = 2, batch_first=True, dropout = 0.2)
@@ -535,7 +537,7 @@ class SubActionActor(nn.Module):
         return binary_beams
         
 class SubActionCritic(nn.Module):
-    def __init__(self, nb_states，nb_actions, window_len, num_measurements):
+    def __init__(self, nb_states, nb_actions, window_len, num_measurements):
         super().__init__()
         self.nb_states = nb_states
         self.nb_actions = nb_actions
@@ -549,8 +551,21 @@ class SubActionCritic(nn.Module):
         
     def forward(self, x):
         s,a = x
+        all_sub_values = []
+        all_values = []
+        bsize = s.shape[0]
         lstm_out, lstm_hidden = self.lstm(s)
-        for i in np.nonzeros(a)
+        for i in range(bsize):
+            lstm_out_item = lstm_out[i].unsqueeze(0)
+            sub_action_idc_item = np.nonzeros(a[i])[0]
+            sub_values_item = [self.sub_action_nns[j](lstm_out_item) for j in sub_action_idc_item]
+            value_item = torch.stack(sub_values_item,dim=0).sum(dim=0)
+            all_sub_values.append(sub_values_item)
+            all_values.append(value_item)
+        all_sub_values = np.stack(all_sub_values, dim=0)
+        all_values = np.stack(all_values, dim=0)
+        return all_sub_values, all_values
+            
         
         
         
