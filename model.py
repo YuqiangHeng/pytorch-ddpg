@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # from ipdb import set_trace as debug
 
 """
@@ -518,13 +519,13 @@ class SubActionActor(nn.Module):
         self.lstm = nn.LSTM(input_size = self.nb_states, hidden_size = self.nb_states, num_layers = 2, batch_first=True, dropout = 0.2)
         self.fc_out_dim = int(self.nb_states/2)
         self.fc = nn.Sequential(nn.Linear(self.nb_states,self.fc_out_dim), nn.ReLU())
-        self.sub_action_nns = [SubActionNN(self.nb_states) for i in range(self.nb_actions)]
+        self.sub_action_nns = [SubActionNN(self.nb_states).to(device) for i in range(self.nb_actions)]
                 
     def forward(self, x):
         out, hidden = self.lstm(x)
         sub_action_out = []
         for nn in self.sub_action_nns:
-            sub_action_score = nn(out)
+            sub_action_score = nn(out[:,-1,:])
             sub_action_out.append(sub_action_out)
         return sub_action_out
     

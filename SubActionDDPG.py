@@ -10,6 +10,8 @@ from memory import SequentialMemory,BeamSpaceSubActionSequentialMemory
 from random_process import OrnsteinUhlenbeckProcess
 from util import *
 
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # from ipdb import set_trace as debug
 
 criterion = nn.MSELoss()
@@ -36,12 +38,12 @@ class SubAction_DDPG(object):
         # self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
         # self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
         
-        self.actor = SubActionActor(self.nb_states, self.nb_actions, self.window_length, self.num_measurements)
-        self.actor_target = SubActionActor(self.nb_states, self.nb_actions, self.window_length, self.num_measurements)
+        self.actor = SubActionActor(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
+        self.actor_target = SubActionActor(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
         
-        self.critic = SubActionCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements)
-        self.critic_target = SubActionCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements)
+        self.critic = SubActionCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
+        self.critic_target = SubActionCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
         self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
 
         hard_update(self.actor_target, self.actor) # Make sure target is with the same weight
@@ -190,7 +192,8 @@ class SubAction_DDPG(object):
         s_t = self.memory.get_recent_state(observation)
         #remove existing empty dimension and add batch dimension 
         s_t_array = np.array([np.squeeze(np.array(s_t))])
-        actor_output = to_numpy(self.actor(to_tensor(s_t_array))) #bsize(1) x actor_output_shape
+        s_t_array_tensor = torch.from_numpy(s_t_array).to(device)
+        actor_output = to_numpy(self.actor(s_t_array_tensor)) #bsize(1) x actor_output_shape
         actor_output += self.is_training*max(self.epsilon, 0)*self.random_process.sample()
         action = self.actor.select_beams(actor_output, self.nb_actions, self.num_beams_per_UE).squeeze(0)
         # action = to_numpy(
