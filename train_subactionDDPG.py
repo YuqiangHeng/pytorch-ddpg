@@ -131,6 +131,7 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             agent.memory.append(
                 observation,
                 agent.select_action(observation),
+                info['beams_spe'],
                 0., False
             )
             # reset
@@ -189,7 +190,7 @@ if __name__ == "__main__":
     parser.add_argument('--ou_sigma', default=2, type=float, help='noise sigma') 
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
     parser.add_argument('--validate_episodes', default=100, type=int, help='how many episode to perform during validate experiment')
-    parser.add_argument('--max_episode_length', default=500, type=int, help='')
+    parser.add_argument('--max_episode_length', default=100, type=int, help='')
     parser.add_argument('--validate_steps', default=5000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
@@ -256,7 +257,8 @@ if __name__ == "__main__":
                          save_path = args.output, 
                          max_episode_length=args.max_episode_length,
                          use_saved_traj= args.use_saved_traj_in_validation)    
-    # evaluate = None
+    
+    evaluate = None
     if args.mode == 'train':
         tic = time.time()
         rewards = train(args.train_iter, agent, env, evaluate, 

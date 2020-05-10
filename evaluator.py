@@ -94,7 +94,7 @@ class DDPGAgentEval(object):
         self.memory = BeamSpaceSequentialMemory(limit = int(1e6), window_length = agent.window_length, num_measurements = agent.num_measurements)
         self.ob_t = None
         self.a_t = None
-        if USE_CUDA: self.actor.cuda()
+        # if USE_CUDA: self.actor.cuda()
     
     def observe(self, r_t, ob_t1, done):
         self.memory.append(self.ob_t, self.a_t, r_t, done)
@@ -104,8 +104,9 @@ class DDPGAgentEval(object):
         s_t = self.memory.get_recent_state(observation)
         #remove existing empty dimension and add batch dimension 
         s_t_array = np.array([np.squeeze(np.array(s_t))])
+        s_t_array_tensor = torch.from_numpy(s_t_array).type(torch.FloatTensor).to(device)
         # actor_output = to_numpy(self.actor(torch.from_numpy(s_t_array))).squeeze(0)
-        actor_output = to_numpy(self.actor(to_tensor(s_t_array)))
+        actor_output = to_numpy(self.actor(s_t_array_tensor)) #bsize(1) x actor_output_shape
         action = self.actor.select_beams(actor_output, self.nb_actions, self.num_beams_per_UE) 
         action = action.squeeze(0)
         self.a_t = action

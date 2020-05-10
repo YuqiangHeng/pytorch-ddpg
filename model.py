@@ -4,8 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+from util import device
 # from ipdb import set_trace as debug
 
 """
@@ -526,8 +525,8 @@ class SubActionActor(nn.Module):
         sub_action_out = []
         for nn in self.sub_action_nns:
             sub_action_score = nn(out[:,-1,:])
-            sub_action_out.append(sub_action_out)
-        return sub_action_out
+            sub_action_out.append(sub_action_score)
+        return torch.stack(sub_action_out,dim=1).squeeze(2)
     
     def select_beams(self, x, nb_actions, n):
         bsize = x.shape[0]
@@ -557,14 +556,14 @@ class SubActionCritic(nn.Module):
         bsize = s.shape[0]
         lstm_out, lstm_hidden = self.lstm(s)
         for i in range(bsize):
-            lstm_out_item = lstm_out[i].unsqueeze(0)
-            sub_action_idc_item = np.nonzeros(a[i])[0]
-            sub_values_item = [self.sub_action_nns[j](lstm_out_item) for j in sub_action_idc_item]
-            value_item = torch.stack(sub_values_item,dim=0).sum(dim=0)
+            lstm_out_item = lstm_out[i,-1,:].unsqueeze(0)
+            sub_action_idc_item = np.nonzero(a[i])[0]
+            sub_values_item = torch.stack([self.sub_action_nns[j](lstm_out_item).squeeze() for j in sub_action_idc_item], dim=0)
+            value_item = sub_values_item.sum(dim=0)
             all_sub_values.append(sub_values_item)
             all_values.append(value_item)
-        all_sub_values = np.stack(all_sub_values, dim=0)
-        all_values = np.stack(all_values, dim=0)
+        all_sub_values = torch.stack(all_sub_values, dim=0)
+        all_values = torch.stack(all_values, dim=0)
         return all_sub_values, all_values
             
         

@@ -11,7 +11,7 @@ from random_process import OrnsteinUhlenbeckProcess
 from util import *
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # from ipdb import set_trace as debug
 
 criterion = nn.MSELoss()
@@ -80,23 +80,23 @@ class SubAction_DDPG(object):
 
         # Prepare for the target q batch
         with torch.no_grad():
-            next_states = to_tensor(next_state_batch)
+            next_states = torch.from_numpy(next_state_batch).type(torch.FloatTensor).to(device)
             target_actor_output = self.actor_target(next_states) 
             # next_actions = torch.from_numpy(self.pick_beams_batch(to_numpy(predicted_beam_qual_target)))
             next_actions = self.actor_target.select_beams(to_numpy(target_actor_output), self.nb_actions, self.num_beams_per_UE)
             next_subq_values, next_q_values = self.critic_target([next_states,next_actions])
         # next_q_values.volatile=False
         next_subq_values.requires_grad = True
-        target_subq_batch = to_tensor(subaction_rewards_batch) + \
-            self.discount*to_tensor(terminal_batch.astype(np.float))*next_subq_values    
+        target_subq_batch = torch.from_numpy(subaction_rewards_batch) + \
+            self.discount*torch.from_numpy(terminal_batch.astype(np.float))*next_subq_values    
             
         next_q_values.requires_grad = True    
-        target_q_batch = to_tensor(reward_batch) + \
-            self.discount*to_tensor(terminal_batch.astype(np.float))*next_q_values
+        target_q_batch = torch.from_numpy(reward_batch) + \
+            self.discount*torch.from_numpy(terminal_batch.astype(np.float))*next_q_values
 
         # Critic update
         self.critic.zero_grad()
-        subq_batch, q_batch = self.critic([to_tensor(state_batch), action_batch])
+        subq_batch, q_batch = self.critic([torch.from_numpy(state_batch).type(torch.FloatTensor).to(device), action_batch])
         subvalue_loss = criterion(subq_batch, target_subq_batch)
         value_loss = criterion(q_batch, target_q_batch)
         # print(value_loss.item())
@@ -108,8 +108,8 @@ class SubAction_DDPG(object):
         self.actor.zero_grad()
         
         # Beam qual prediction loss, only if using MSE of actor output
-        states = to_tensor(state_batch)
-        actor_output = self.actor(states)
+        # states = to_tensor(state_batch)
+        actor_output = self.actor(torch.from_numpy(state_batch).type(torch.FloatTensor).to(device))
         # predicted_beam_qual = self.actor(states)
         # broadcasted_action_batch = np.expand_dims(action_batch, axis=1)
         # broadcasted_action_batch = np.repeat(broadcasted_action_batch, self.num_measurements, axis=1)
@@ -192,7 +192,7 @@ class SubAction_DDPG(object):
         s_t = self.memory.get_recent_state(observation)
         #remove existing empty dimension and add batch dimension 
         s_t_array = np.array([np.squeeze(np.array(s_t))])
-        s_t_array_tensor = torch.from_numpy(s_t_array).to(device)
+        s_t_array_tensor = torch.from_numpy(s_t_array).type(torch.FloatTensor).to(device)
         actor_output = to_numpy(self.actor(s_t_array_tensor)) #bsize(1) x actor_output_shape
         actor_output += self.is_training*max(self.epsilon, 0)*self.random_process.sample()
         action = self.actor.select_beams(actor_output, self.nb_actions, self.num_beams_per_UE).squeeze(0)
