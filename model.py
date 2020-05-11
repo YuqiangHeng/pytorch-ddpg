@@ -506,6 +506,22 @@ class SubActionNN(nn.Module):
         out = self.fc3(out)
         return out
     
+class SubActionCriticNN(nn.Module):
+    def __init__(self, nb_states):
+        super().__init__()
+        self.inputdim = nb_states
+        self.hidden1_dim = int(nb_states/2)
+        self.hidden2_dim = int(nb_states/4)
+        self.fc1 = nn.Sequential(nn.Linear(self.inputdim,self.hidden1_dim), nn.ReLU())
+        self.fc2 = nn.Sequential(nn.Linear(self.hidden1_dim,self.hidden2_dim), nn.ReLU())
+        self.fc3 = nn.Sequential(nn.Linear(self.hidden2_dim,1), nn.ReLU())
+    
+    def forward(self,x):
+        out = self.fc1(x)
+        out = self.fc2(out)
+        out = self.fc3(out)
+        return out
+    
 class SubActionActor(nn.Module):
     def __init__(self, nb_states, nb_actions, window_len, num_measurements):
         super().__init__()
@@ -547,7 +563,7 @@ class SubActionCritic(nn.Module):
         self.lstm = nn.LSTM(input_size = self.nb_states, hidden_size = self.nb_states, num_layers = 2, batch_first=True, dropout = 0.2)
         self.fc_out_dim = int(self.nb_states/2)
         self.fc = nn.Sequential(nn.Linear(self.nb_states,self.fc_out_dim), nn.ReLU())
-        self.sub_action_nns = [SubActionNN(self.nb_states) for i in range(self.nb_actions)]
+        self.sub_action_nns = [SubActionCriticNN(self.nb_states).to(device) for i in range(self.nb_actions)]
         
     def forward(self, x):
         s,a = x
@@ -563,7 +579,7 @@ class SubActionCritic(nn.Module):
             all_sub_values.append(sub_values_item)
             all_values.append(value_item)
         all_sub_values = torch.stack(all_sub_values, dim=0)
-        all_values = torch.stack(all_values, dim=0)
+        all_values = torch.stack(all_values, dim=0).unsqueeze(1)
         return all_sub_values, all_values
             
         

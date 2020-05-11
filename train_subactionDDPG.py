@@ -115,11 +115,21 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
                 if env.enable_baseline and env.enable_genie:
                     print('Episode #{:5d} {:5d} steps: agent:{:07.4f} baseline:{:07.4f} genie:{:07.4f}'.format(episode,episode_steps,episode_avg_agent_reward,episode_avg_baseline_reward,episode_avg_genie_reward))
                 elif env.enable_baseline:
-                    print('Episode #{:5d}: agent:{:07.4f} baseline:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_baseline_reward))
+                    print('Episode #{:5d} {:5d} steps: agent:{:07.4f} baseline:{:07.4f}'.format(episode,episode_steps,episode_avg_agent_reward,episode_avg_baseline_reward))
                 elif env.enable_genie:
-                    print('Episode #{:5d}: agent:{:07.4f} genie:{:07.4f}'.format(episode,episode_avg_agent_reward,episode_avg_genie_reward))
+                    print('Episode #{:5d} {:5d} steps: agent:{:07.4f} genie:{:07.4f}'.format(episode,episode_steps,episode_avg_agent_reward,episode_avg_genie_reward))
                 else:
-                    print('Episode #{:5d}: agent:{:07.4f}'.format(episode,episode_avg_agent_reward))
+                    print('Episode #{:5d} {:5d} steps: agent:{:07.4f}'.format(episode,episode_steps,episode_avg_agent_reward))
+                
+                if step - 1 > args.warmup:
+                    plt.figure()
+                    plt.plot(np.array(agent.training_log['critic_mse'])[:,0], label='total value mse')
+                    plt.plot(np.array(agent.training_log['critic_mse'])[:,1], label='subaction value mse')
+                    plt.plot(agent.training_log['actor_value'], label='actor value')
+                    plt.ylabel('loss')
+                    plt.xlabel('number of training iterations')
+                    plt.legend()
+                    plt.show()
 
 
             # temp_action = agent.select_action(observation)
@@ -180,8 +190,8 @@ if __name__ == "__main__":
     parser.add_argument('--hidden2', default=300, type=int, help='hidden num of second fully connect layer')
     parser.add_argument('--rate', default=0.001, type=float, help='learning rate')
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
-    parser.add_argument('--warmup', default=100, type=int, help='time without training but only filling the replay memory')
-    parser.add_argument('--discount', default=0.0, type=float, help='')
+    parser.add_argument('--warmup', default=128, type=int, help='time without training but only filling the replay memory')
+    parser.add_argument('--discount', default=0.9, type=float, help='')
     parser.add_argument('--bsize', default=128, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=60000, type=int, help='memory size')
@@ -216,7 +226,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_saved_traj_in_validation',default=False)
     parser.add_argument('--actor_lambda',type=float,default=0.5)
     
-    parser.add_argument('--debug', default = False, dest='debug')
+    parser.add_argument('--debug', default = True, dest='debug')
 
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)

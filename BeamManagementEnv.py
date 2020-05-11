@@ -650,7 +650,10 @@ class BeamManagementEnv(gym.Env):
                     segment_start = self.traj_point_distances[self.h_idc_in_traj_covered[i]]
                     segment_end = self.traj_point_distances[self.h_idc_in_traj_covered[i+1]]
                 reward += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
-                beams_spe[beam_idx] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
+                try:
+                    beams_spe[beam_idx] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
+                except:
+                    print('oh')
         return reward, beams_used, beams_spe
   
         

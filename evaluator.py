@@ -101,15 +101,16 @@ class DDPGAgentEval(object):
         self.ob_t = ob_t1
 
     def select_action(self, observation):
-        s_t = self.memory.get_recent_state(observation)
-        #remove existing empty dimension and add batch dimension 
-        s_t_array = np.array([np.squeeze(np.array(s_t))])
-        s_t_array_tensor = torch.from_numpy(s_t_array).type(torch.FloatTensor).to(device)
-        # actor_output = to_numpy(self.actor(torch.from_numpy(s_t_array))).squeeze(0)
-        actor_output = to_numpy(self.actor(s_t_array_tensor)) #bsize(1) x actor_output_shape
-        action = self.actor.select_beams(actor_output, self.nb_actions, self.num_beams_per_UE) 
-        action = action.squeeze(0)
-        self.a_t = action
+        with torch.no_grad():
+            s_t = self.memory.get_recent_state(observation)
+            #remove existing empty dimension and add batch dimension 
+            s_t_array = np.array([np.squeeze(np.array(s_t))])
+            s_t_array_tensor = torch.from_numpy(s_t_array).type(torch.FloatTensor).to(device)
+            # actor_output = to_numpy(self.actor(torch.from_numpy(s_t_array))).squeeze(0)
+            actor_output = to_numpy(self.actor(s_t_array_tensor)) #bsize(1) x actor_output_shape
+            action = self.actor.select_beams(actor_output, self.nb_actions, self.num_beams_per_UE) 
+            action = action.squeeze(0)
+            self.a_t = action
         return action
     
     def pick_beams(self, observation:np.ndarray):
