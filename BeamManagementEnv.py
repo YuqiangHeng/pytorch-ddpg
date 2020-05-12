@@ -653,7 +653,7 @@ class BeamManagementEnv(gym.Env):
                 try:
                     beams_spe[beam_idx] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
                 except:
-                    print('oh')
+                    print(beam_idx)
         return reward, beams_used, beams_spe
   
         

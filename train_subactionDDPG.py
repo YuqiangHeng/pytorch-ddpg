@@ -121,13 +121,14 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
                 else:
                     print('Episode #{:5d} {:5d} steps: agent:{:07.4f}'.format(episode,episode_steps,episode_avg_agent_reward))
                 
-                if step - 1 > args.warmup:
+                if step - 1 > args.warmup and episode % 25 == 0:
                     plt.figure()
                     plt.plot(np.array(agent.training_log['critic_mse'])[:,0], label='total value mse')
                     plt.plot(np.array(agent.training_log['critic_mse'])[:,1], label='subaction value mse')
                     plt.plot(agent.training_log['actor_value'], label='actor value')
                     plt.ylabel('loss')
                     plt.xlabel('number of training iterations')
+                    plt.title('actor/critic loss after {} steps'.format(step))
                     plt.legend()
                     plt.show()
 
@@ -192,7 +193,7 @@ if __name__ == "__main__":
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
     parser.add_argument('--warmup', default=128, type=int, help='time without training but only filling the replay memory')
     parser.add_argument('--discount', default=0.9, type=float, help='')
-    parser.add_argument('--bsize', default=128, type=int, help='minibatch size')
+    parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=60000, type=int, help='memory size')
     parser.add_argument('--tau', default=0.01, type=float, help='moving average for target network')
@@ -204,7 +205,7 @@ if __name__ == "__main__":
     parser.add_argument('--validate_steps', default=5000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=10001, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=100001, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
