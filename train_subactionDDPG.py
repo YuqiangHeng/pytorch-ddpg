@@ -192,7 +192,7 @@ if __name__ == "__main__":
     parser.add_argument('--rate', default=0.001, type=float, help='learning rate')
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
     parser.add_argument('--warmup', default=128, type=int, help='time without training but only filling the replay memory')
-    parser.add_argument('--discount', default=0.9, type=float, help='')
+    parser.add_argument('--discount', default=0.5, type=float, help='')
     parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=60000, type=int, help='memory size')
@@ -202,10 +202,10 @@ if __name__ == "__main__":
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
     parser.add_argument('--validate_episodes', default=100, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=100, type=int, help='')
-    parser.add_argument('--validate_steps', default=5000, type=int, help='how many steps to perform a validate experiment')
+    parser.add_argument('--validate_steps', default=500, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=100001, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=1001, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -225,6 +225,10 @@ if __name__ == "__main__":
     parser.add_argument('--oversampling_factor',type=int,default=1)
     parser.add_argument('--num_antennas',type=int,default=64)
     parser.add_argument('--use_saved_traj_in_validation',default=False)
+    parser.add_argument('--normalize',default=True)
+    
+    
+    
     parser.add_argument('--actor_lambda',type=float,default=0.5)
     
     parser.add_argument('--debug', default = True, dest='debug')
@@ -243,6 +247,7 @@ if __name__ == "__main__":
                             enable_baseline=args.enable_baseline, 
                             enable_genie=args.enable_genie,
                             combine_state=args.combine_state,
+                            normalize = args.normalize,
                             full_observation = args.full_observation,
                             num_measurements = args.num_measurements)
     # env = BeamManagementEnvMultiFrame(window_length = window_len, enable_baseline=True,enable_genie=True)

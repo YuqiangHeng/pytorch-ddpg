@@ -217,6 +217,7 @@ class BeamManagementEnv(gym.Env):
            enable_exhaustive = False,
            combine_state = False,
            full_observation = False,
+           normalize = False,
            num_measurements = 1,
            min_traj_len = 5):
         self.enable_baseline = enable_baseline
@@ -231,6 +232,7 @@ class BeamManagementEnv(gym.Env):
         self.num_beams_per_UE = num_beams_per_UE
         self.action_space = spaces.MultiBinary(self.codebook_size)
         self.min_traj_len = min_traj_len
+        self.normalize = normalize
         if self.combine_state:
             self.observation_space = spaces.Box(low = np.full(int(2*self.codebook_size),-np.inf), high = np.full(int(2*self.codebook_size),np.inf), dtype=np.float32)
         else:
@@ -263,6 +265,8 @@ class BeamManagementEnv(gym.Env):
         self.seed()
         self.use_saved_trajectory = False
         self.num_saved_traj = None
+        
+        self.traj, self.traj_pos, self.traj_edge_lengths, self.traj_total_len, self.traj_point_distances = self.get_trajectory()
         
     def set_data_mode(self, use_saved_trajectory=False, num_saved_traj=None):
         self.use_saved_trajectory = use_saved_trajectory
@@ -465,8 +469,11 @@ class BeamManagementEnv(gym.Env):
 #         prev_h_idc_in_traj = min(np.nonzero(self.traj_point_distances > self.ue_traveled_distance)[0])-1
 #         self.h_idc_in_traj_covered = np.insert(idc_in_traj_covered,0,prev_h_idc_in_traj) #idc of h (local idc) in traj, including starting h (last point in prev segment)
 #         self.h_idc_covered = self.traj[self.h_idc_in_traj_covered] #global idc
-        
         reward, beams_used, beams_spe = self._calc_reward(self.assigned_beams_per_UE)
+        if self.normalize:
+            upperbound_reward, _, _ = self._calc_reward(np.arange(self.codebook_size))
+            reward /= upperbound_reward
+            beams_spe /= upperbound_reward
         info['beams_spe'] = beams_spe
         # if len(h_idc_covered) == 1:
         #     # H doesnt change within the segment
@@ -598,14 +605,14 @@ class BeamManagementEnv(gym.Env):
                 
             # update baseline beams (used in next time step) that's centered around the best beam in the last h in this segment
             if self.enable_baseline:
-                # # update baseline beamset every step to center around max
-                # baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
-                # self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
+                # update baseline beamset every step to center around max
+                baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
+                self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
                 
                 #Alternative: UE measures entire codebook and reports top-k: calculate new max of entire codebook, update beamset if new max not in current beamset
-                baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
-                if not baseline_max_beam in self.baseline_beams:
-                    self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)
+                # baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
+                # if not baseline_max_beam in self.baseline_beams:
+                #     self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)
             
             # if self.combine_state:
             #     observation = np.concatenate((beam_report,action),axis=0)
@@ -739,7 +746,7 @@ class BeamManagementEnv(gym.Env):
         if self.enable_exhaustive:
             self.reward_log['exhaustive'] = []
         
-        self.traj, self.traj_pos, self.traj_edge_lengths, self.traj_total_len, self.traj_point_distances = self.get_trajectory()
+        # self.traj, self.traj_pos, self.traj_edge_lengths, self.traj_total_len, self.traj_point_distances = self.get_trajectory()
         self.episode_end = False
         # self.traj = self.get_trajectory()
         # self.traj_pos = self.ue_loc[self.traj]
