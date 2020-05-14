@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 
-from model import (SubActionActor, SubActionCritic)
+from model import (SubActionActor, SubActionActorParallel, SubActionCritic, SubActionCriticParallel)
 from memory import SequentialMemory,BeamSpaceSubActionSequentialMemory
 from random_process import OrnsteinUhlenbeckProcess
 from util import *
@@ -83,14 +83,14 @@ class SubAction_DDPG(object):
             next_states = torch.from_numpy(next_state_batch).type(torch.FloatTensor).to(device)
             target_actor_output = self.actor_target(next_states) 
             # next_actions = torch.from_numpy(self.pick_beams_batch(to_numpy(predicted_beam_qual_target)))
-            next_actions = self.actor_target.select_beams(to_numpy(target_actor_output), self.nb_actions, self.num_beams_per_UE)
+            next_actions = self.actor_target.select_beams(to_numpy(target_actor_output), self.num_beams_per_UE)
             next_subq_values, next_q_values = self.critic_target([next_states,next_actions])
         # next_q_values.volatile=False
         next_subq_values.requires_grad = True
         next_q_values.requires_grad = True
         
-        # target_subq_batch = torch.from_numpy(subaction_rewards_batch).to(device) + \
-        #     self.discount*torch.from_numpy(terminal_batch.astype(np.float)).to(device)*next_q_values.expand(-1, self.num_beams_per_UE)
+        target_subq_batch = torch.from_numpy(subaction_rewards_batch).to(device) + \
+            self.discount*torch.from_numpy(terminal_batch.astype(np.float)).to(device)*next_q_values.expand(-1, self.num_beams_per_UE)/self.num_beams_per_UE
             
         target_q_batch = torch.from_numpy(reward_batch).to(device) + \
             self.discount*torch.from_numpy(terminal_batch.astype(np.float)).to(device)*next_q_values
@@ -98,11 +98,11 @@ class SubAction_DDPG(object):
         # Critic update
         self.critic.zero_grad()
         subq_batch, q_batch = self.critic([torch.from_numpy(state_batch).type(torch.FloatTensor).to(device), action_batch])
-        # subvalue_loss = criterion(subq_batch, target_subq_batch)
-        subvalue_loss = torch.tensor(0)
+        subvalue_loss = criterion(subq_batch, target_subq_batch)
+        # subvalue_loss = torch.tensor(0)
         value_loss = criterion(q_batch, target_q_batch)
-        # total_loss = 0.5*subvalue_loss + 0.5*value_loss
-        total_loss = value_loss
+        total_loss = 0.5*subvalue_loss + 0.5*value_loss
+        # total_loss = value_loss
         # print(value_loss.item())
         total_loss.backward()
         self.training_log['critic_mse'].append([value_loss.item(),subvalue_loss.item()])
@@ -124,7 +124,7 @@ class SubAction_DDPG(object):
         
         # Value loss
         # actions = torch.from_numpy(self.pick_beams_batch(to_numpy(predicted_beam_qual)))
-        actions = self.actor.select_beams(to_numpy(actor_output),self.nb_actions,self.num_beams_per_UE)
+        actions = self.actor.select_beams(to_numpy(actor_output),self.num_beams_per_UE)
         subaction_policy_loss, policy_loss = self.critic([states,actions])
         policy_loss = -policy_loss.mean()
         self.training_log['actor_value'].append(policy_loss.item())
@@ -200,7 +200,7 @@ class SubAction_DDPG(object):
             s_t_array_tensor = torch.from_numpy(s_t_array).type(torch.FloatTensor).to(device)
             actor_output = to_numpy(self.actor(s_t_array_tensor)) #bsize(1) x actor_output_shape
             actor_output += self.is_training*max(self.epsilon, 0)*self.random_process.sample()
-            action = self.actor.select_beams(actor_output, self.nb_actions, self.num_beams_per_UE).squeeze(0)
+            action = self.actor.select_beams(actor_output, self.num_beams_per_UE).squeeze(0)
             # action = to_numpy(
             #     self.actor(to_tensor(np.array([s_t])))
             # ).squeeze(0)
