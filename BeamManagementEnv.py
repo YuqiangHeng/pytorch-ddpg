@@ -499,6 +499,9 @@ class BeamManagementEnv(gym.Env):
 
         if self.enable_baseline:
             baseline_reward, baseline_beams_used, baseline_beams_spe = self._calc_reward(self.baseline_beams)
+            if self.normalize:
+                baseline_reward /= upperbound_reward
+                baseline_beams_spe /= upperbound_reward
             # if len(h_idc_covered) == 1:
             #     # H doesnt change within the segment
             #     baseline_segment_bf_gains = self.measure_beams_single_UE(h_idc_covered[0], self.baseline_beams)
@@ -579,7 +582,10 @@ class BeamManagementEnv(gym.Env):
                 sel = pool[np.argmax(rewards)]
                 incremental_selected.append(sel)
                 pool.remove(sel)
-            incremental_sel_reward = self._calc_reward(incremental_selected)[0]
+            incremental_sel_reward, incremental_beams_used, incremental_beams_spe = self._calc_reward(incremental_selected)[0]
+            if self.normalize:
+                incremental_sel_reward /= upperbound_reward
+                incremental_beams_spe /= upperbound_reward
             # toc = time.time()
             # print('Time for incremental coverage search:{} s'.format(toc-tic))
             info['incremental_reward'] = incremental_sel_reward
@@ -628,8 +634,10 @@ class BeamManagementEnv(gym.Env):
         #h_idc_covered: global idc
         #total segment_length: literal
         #selected_beams: an array of index of beams, not binary vector
+        #beams_spe: sum spe for each beam in codebook: codebook_size x 1
         beams_used = []
         beams_spe = np.zeros(np.array(selected_beams).squeeze().shape)
+        # beams_spe = np.zeros(self.codebook_size)
         if len(self.h_idc_covered) == 1:
             # H doesnt change within the segment
             segment_bf_gains = self.measure_beams_single_UE(self.h_idc_covered[0], selected_beams)
@@ -639,6 +647,7 @@ class BeamManagementEnv(gym.Env):
             beam = selected_beams[beam_idx]
             beams_used.append(beam)
             beams_spe[beam_idx] += beam_spe
+            # beams_spe[beam] += beam_spe
         else:
             reward = 0
             for i in range(len(self.h_idc_covered)):
@@ -659,6 +668,7 @@ class BeamManagementEnv(gym.Env):
                 reward += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
                 try:
                     beams_spe[beam_idx] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
+                    # beams_spe[beam] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
                 except:
                     print(beam_idx)
         return reward, beams_used, beams_spe
@@ -746,7 +756,7 @@ class BeamManagementEnv(gym.Env):
         if self.enable_exhaustive:
             self.reward_log['exhaustive'] = []
         
-        # self.traj, self.traj_pos, self.traj_edge_lengths, self.traj_total_len, self.traj_point_distances = self.get_trajectory()
+        self.traj, self.traj_pos, self.traj_edge_lengths, self.traj_total_len, self.traj_point_distances = self.get_trajectory()
         self.episode_end = False
         # self.traj = self.get_trajectory()
         # self.traj_pos = self.ue_loc[self.traj]
