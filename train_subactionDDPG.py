@@ -192,7 +192,7 @@ if __name__ == "__main__":
     parser.add_argument('--rate', default=0.001, type=float, help='learning rate')
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
     parser.add_argument('--warmup', default=128, type=int, help='time without training but only filling the replay memory')
-    parser.add_argument('--discount', default=0.5, type=float, help='')
+    parser.add_argument('--discount', default=0.6, type=float, help='')
     parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=60000, type=int, help='memory size')
@@ -302,25 +302,26 @@ if __name__ == "__main__":
         
         if 'critic_mse' in agent.training_log.keys():
             plt.figure()
-            plt.plot(agent.training_log['critic_mse'],label='critic MSE')
+            plt.plot(np.array(agent.training_log['critic_mse'])[:,0],label='critic value MSE')
+            plt.plot(np.array(agent.training_log['critic_mse'])[:,1],label='critic subaction value MSE')
             plt.legend()
             plt.show()
-        if 'actor_mse' in agent.training_log.keys():            
-            plt.figure()
-            plt.plot(agent.training_log['actor_mse'],label='actor MSE')
-            plt.legend()
-            plt.show()
+        # if 'actor_mse' in agent.training_log.keys():            
+        #     plt.figure()
+        #     plt.plot(agent.training_log['actor_mse'],label='actor MSE')
+        #     plt.legend()
+        #     plt.show()
         if 'actor_value' in agent.training_log.keys():            
             plt.figure()
             plt.plot(agent.training_log['actor_value'],label='actor Value')
             plt.legend()
             plt.show()
-        if 'actor_total' in agent.training_log.keys():                        
-            plt.figure()
-            plt.plot(agent.training_log['actor_total'],label='actor Total')
-            plt.xlabel('training steps')
-            plt.legend()
-            plt.show()
+        # if 'actor_total' in agent.training_log.keys():                        
+        #     plt.figure()
+        #     plt.plot(agent.training_log['actor_total'],label='actor Total')
+        #     plt.xlabel('training steps')
+        #     plt.legend()
+        #     plt.show()
         
         # if args.enable_baseline and args.enable_genie:
         #     plt.figure()
@@ -358,7 +359,8 @@ if __name__ == "__main__":
         #     plt.plot(rewards)
         #     plt.xlabel('episodes')
         #     plt.ylabel('avg episode reward')
-
+        # rewards_test = train(args.train_iter, agent, env, evaluate, 
+        #     args.validate_steps, args.output, max_episode_length=args.max_episode_length, debug=args.debug)
         
             
                     

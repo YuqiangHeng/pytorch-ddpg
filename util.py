@@ -4,11 +4,11 @@ import torch
 from torch.autograd import Variable
 
 USE_CUDA = torch.cuda.is_available()
-USE_CUDA = False
+# USE_CUDA = False
 FLOAT = torch.cuda.FloatTensor if USE_CUDA else torch.FloatTensor
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-device = torch.device('cpu')
+# device = torch.device('cpu')
 
 def prRed(prt): print("\033[91m {}\033[00m" .format(prt))
 def prGreen(prt): print("\033[92m {}\033[00m" .format(prt))

@@ -544,9 +544,9 @@ class SubActionActor(nn.Module):
             sub_action_out.append(sub_action_score)
         return torch.stack(sub_action_out,dim=1).squeeze(2)
     
-    def select_beams(self, x, nb_actions, n):
+    def select_beams(self, x, n):
         bsize = x.shape[0]
-        binary_beams = np.zeros((bsize, nb_actions))
+        binary_beams = np.zeros((bsize, self.nb_actions))
         for i in range(bsize):
             sel = np.argsort(x[i])[-n:]
             binary_beams[i,sel] = 1
@@ -574,6 +574,7 @@ class SubActionCritic(nn.Module):
         for i in range(bsize):
             lstm_out_item = lstm_out[i,-1,:].unsqueeze(0)
             sub_action_idc_item = np.nonzero(a[i])[0]
+            # sub_values_item = torch.stack([self.sub_action_nns[j](lstm_out_item).squeeze() if j in sub_action_idc_item else torch.tensor(0.) for j in range(self.nb_actions)], dim=0)
             sub_values_item = torch.stack([self.sub_action_nns[j](lstm_out_item).squeeze() for j in sub_action_idc_item], dim=0)
             value_item = sub_values_item.sum(dim=0)
             all_sub_values.append(sub_values_item)
@@ -582,11 +583,70 @@ class SubActionCritic(nn.Module):
         all_values = torch.stack(all_values, dim=0).unsqueeze(1)
         return all_sub_values, all_values
             
+class SubActionActorParallel(nn.Module):
+    def __init__(self, nb_states, nb_actions, window_len, num_measurements):
+        super().__init__()
+        self.nb_states = nb_states
+        self.nb_actions = nb_actions
+        self.window_len = window_len
+        self.outshape = nb_actions
+        self.num_measurements = num_measurements
+        self.input_shape = (self.window_len * self.num_measurements, nb_states)
+        self.lstm = nn.LSTM(input_size = self.nb_states, hidden_size = self.nb_states, num_layers = 2, batch_first=True, dropout = 0.2)
+        self.hidden1_size = int(self.nb_states/2)
+        self.hidden2_size = int(self.nb_states/4)
+        self.sub_action_nn = nn.Sequential(nn.Conv1d(in_channels=self.nb_states*self.nb_actions, out_channels=self.hidden1_size*self.nb_actions, kernel_size=1, groups=self.nb_actions),
+                                           nn.ReLU(),
+                                           nn.Conv1d(in_channels=self.hidden1_size*self.nb_actions, out_channels=self.hidden2_size*self.nb_actions, kernel_size=1, groups=self.nb_actions),
+                                           nn.ReLU(),
+                                           nn.Conv1d(in_channels=self.hidden2_size*self.nb_actions, out_channels=1*self.nb_actions, kernel_size=1, groups=self.nb_actions),
+                                           nn.Sigmoid())
+                
+    def forward(self, x):
+        out, hidden = self.lstm(x)
+        sub_action_in = out[:,-1,:].repeat(1, self.nb_actions).unsqueeze(-1)
+        bsize = x.shape[0]
+        sub_action_out = self.sub_action_nn(sub_action_in)
+        return sub_action_out.view(bsize,self.nb_actions)
+    
+    def select_beams(self, x, n):
+        bsize = x.shape[0]
+        binary_beams = np.zeros((bsize, self.nb_actions))
+        for i in range(bsize):
+            sel = np.argsort(x[i])[-n:]
+            binary_beams[i,sel] = 1
+        return binary_beams        
         
+class SubActionCriticParallel(nn.Module):
+    def __init__(self, nb_states, nb_actions, window_len, num_measurements):
+        super().__init__()
+        self.nb_states = nb_states
+        self.nb_actions = nb_actions
+        self.window_len = window_len
+        self.num_measurements = num_measurements
+        self.input_shape = (self.window_len * self.num_measurements, nb_states)
+        self.hidden1_size = int(self.nb_states/2)
+        self.hidden2_size = int(self.nb_states/4)
+        self.lstm = nn.LSTM(input_size = self.nb_states, hidden_size = self.nb_states, num_layers = 2, batch_first=True, dropout = 0.2)
         
+        self.sub_action_nn = nn.Sequential(nn.Conv1d(in_channels=self.nb_states*self.nb_actions, out_channels=self.hidden1_size*self.nb_actions, kernel_size=1, groups=self.nb_actions),
+                                           nn.ReLU(),
+                                           nn.Conv1d(in_channels=self.hidden1_size*self.nb_actions, out_channels=self.hidden2_size*self.nb_actions, kernel_size=1, groups=self.nb_actions),
+                                           nn.ReLU(),
+                                           nn.Conv1d(in_channels=self.hidden2_size*self.nb_actions, out_channels=1*self.nb_actions, kernel_size=1, groups=self.nb_actions),
+                                           nn.ReLU())
         
-        
-
+    def forward(self, x):
+        s,a = x
+        a = torch.from_numpy(a).to(device)
+        bsize = s.shape[0]
+        lstm_out, lstm_hidden = self.lstm(s)
+        sub_action_in = lstm_out[:,-1,:].repeat(1, self.nb_actions).unsqueeze(-1)
+        sub_action_out = self.sub_action_nn(sub_action_in)
+        sub_action_out = sub_action_out.view(bsize,self.nb_actions)
+        sub_action_masked = torch.mul(sub_action_out, a)
+        return sub_action_masked, sub_action_masked.sum(dim=1).unsqueeze(-1)
+            
         
 from BeamManagementEnv import BeamManagementEnv
 from memory import SequentialMemory,BeamSpaceSequentialMemory,RingBuffer
