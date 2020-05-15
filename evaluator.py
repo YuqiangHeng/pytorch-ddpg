@@ -89,7 +89,8 @@ class DDPGAgentEval(object):
         self.nb_states = agent.nb_states
         self.nb_actions= agent.nb_actions
         self.num_beams_per_UE = agent.num_beams_per_UE
-        self.actor = deepcopy(agent.actor)
+        # self.actor = deepcopy(agent.actor)
+        self.actor = agent.actor
         self.actor.eval()
         self.memory = BeamSpaceSequentialMemory(limit = int(1e6), window_length = agent.window_length, num_measurements = agent.num_measurements)
         self.ob_t = None
@@ -108,7 +109,7 @@ class DDPGAgentEval(object):
             s_t_array_tensor = torch.from_numpy(s_t_array).type(torch.FloatTensor).to(device)
             # actor_output = to_numpy(self.actor(torch.from_numpy(s_t_array))).squeeze(0)
             actor_output = to_numpy(self.actor(s_t_array_tensor)) #bsize(1) x actor_output_shape
-            action = self.actor.select_beams(actor_output, self.nb_actions, self.num_beams_per_UE) 
+            action = self.actor.select_beams(actor_output, self.num_beams_per_UE) 
             action = action.squeeze(0)
             self.a_t = action
         return action

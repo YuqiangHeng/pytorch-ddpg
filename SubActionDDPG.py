@@ -38,12 +38,12 @@ class SubAction_DDPG(object):
         # self.critic_target = Critic(self.nb_states, self.nb_actions, **net_cfg)
         # self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
         
-        self.actor = SubActionActor(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
-        self.actor_target = SubActionActor(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
+        self.actor = SubActionActorParallel(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
+        self.actor_target = SubActionActorParallel(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
         
-        self.critic = SubActionCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
-        self.critic_target = SubActionCritic(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
+        self.critic = SubActionCriticParallel(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
+        self.critic_target = SubActionCriticParallel(self.nb_states, self.nb_actions, self.window_length, self.num_measurements).to(device)
         self.critic_optim  = Adam(self.critic.parameters(), lr=args.rate)
 
         hard_update(self.actor_target, self.actor) # Make sure target is with the same weight
@@ -90,7 +90,7 @@ class SubAction_DDPG(object):
         next_q_values.requires_grad = True
         
         target_subq_batch = torch.from_numpy(subaction_rewards_batch).to(device) + \
-            self.discount*torch.from_numpy(terminal_batch.astype(np.float)).to(device)*next_q_values.expand(-1, self.num_beams_per_UE)/self.num_beams_per_UE
+            self.discount*torch.from_numpy(terminal_batch.astype(np.float)).to(device)*next_q_values.expand(-1, self.nb_actions)/self.num_beams_per_UE
             
         target_q_batch = torch.from_numpy(reward_batch).to(device) + \
             self.discount*torch.from_numpy(terminal_batch.astype(np.float)).to(device)*next_q_values

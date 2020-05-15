@@ -77,8 +77,8 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             sns.kdeplot(validate_rewards['agent_rewards'],label='agent')
             if val_env.enable_baseline:
                 sns.kdeplot(validate_rewards['baseline_rewards'],label='baseline')
-            if val_env.enable_genie:
-                sns.kdeplot(validate_rewards['genie_rewards'],label='upperbound')
+            # if val_env.enable_genie:
+            #     sns.kdeplot(validate_rewards['genie_rewards'],label='upperbound')
             if val_env.enable_exhaustive:
                 sns.kdeplot(validate_rewards['exhaustive_rewards'],label='iterative selection with genie')
             plt.legend();
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
     parser.add_argument('--warmup', default=128, type=int, help='time without training but only filling the replay memory')
     parser.add_argument('--discount', default=0.6, type=float, help='')
-    parser.add_argument('--bsize', default=32, type=int, help='minibatch size')
+    parser.add_argument('--bsize', default=64, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=60000, type=int, help='memory size')
     parser.add_argument('--tau', default=0.01, type=float, help='moving average for target network')
@@ -205,7 +205,7 @@ if __name__ == "__main__":
     parser.add_argument('--validate_steps', default=500, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
-    parser.add_argument('--train_iter', default=1001, type=int, help='train iters each timestep')
+    parser.add_argument('--train_iter', default=100001, type=int, help='train iters each timestep')
     parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
     parser.add_argument('--seed', default=-1, type=int, help='')
     parser.add_argument('--resume', default='default', type=str, help='Resuming model path for testing')
@@ -274,7 +274,7 @@ if __name__ == "__main__":
                          max_episode_length=args.max_episode_length,
                          use_saved_traj= args.use_saved_traj_in_validation)    
     
-    evaluate = None
+    # evaluate = None
     if args.mode == 'train':
         tic = time.time()
         rewards = train(args.train_iter, agent, env, evaluate, 

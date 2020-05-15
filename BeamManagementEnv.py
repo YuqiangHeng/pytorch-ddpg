@@ -582,7 +582,7 @@ class BeamManagementEnv(gym.Env):
                 sel = pool[np.argmax(rewards)]
                 incremental_selected.append(sel)
                 pool.remove(sel)
-            incremental_sel_reward, incremental_beams_used, incremental_beams_spe = self._calc_reward(incremental_selected)[0]
+            incremental_sel_reward, incremental_beams_used, incremental_beams_spe = self._calc_reward(incremental_selected)
             if self.normalize:
                 incremental_sel_reward /= upperbound_reward
                 incremental_beams_spe /= upperbound_reward
@@ -636,8 +636,8 @@ class BeamManagementEnv(gym.Env):
         #selected_beams: an array of index of beams, not binary vector
         #beams_spe: sum spe for each beam in codebook: codebook_size x 1
         beams_used = []
-        beams_spe = np.zeros(np.array(selected_beams).squeeze().shape)
-        # beams_spe = np.zeros(self.codebook_size)
+        # beams_spe = np.zeros(np.array(selected_beams).squeeze().shape)
+        beams_spe = np.zeros(self.codebook_size)
         if len(self.h_idc_covered) == 1:
             # H doesnt change within the segment
             segment_bf_gains = self.measure_beams_single_UE(self.h_idc_covered[0], selected_beams)
@@ -646,8 +646,8 @@ class BeamManagementEnv(gym.Env):
             beam_idx = np.argmax(segment_bf_gains)
             beam = selected_beams[beam_idx]
             beams_used.append(beam)
-            beams_spe[beam_idx] += beam_spe
-            # beams_spe[beam] += beam_spe
+            # beams_spe[beam_idx] += beam_spe
+            beams_spe[beam] += beam_spe
         else:
             reward = 0
             for i in range(len(self.h_idc_covered)):
@@ -667,8 +667,8 @@ class BeamManagementEnv(gym.Env):
                     segment_end = self.traj_point_distances[self.h_idc_in_traj_covered[i+1]]
                 reward += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
                 try:
-                    beams_spe[beam_idx] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
-                    # beams_spe[beam] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
+                    # beams_spe[beam_idx] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
+                    beams_spe[beam] += segment_achievable_rate*(segment_end - segment_start)/self.total_segment_length   
                 except:
                     print(beam_idx)
         return reward, beams_used, beams_spe
