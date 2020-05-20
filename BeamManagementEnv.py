@@ -611,14 +611,14 @@ class BeamManagementEnv(gym.Env):
                 
             # update baseline beams (used in next time step) that's centered around the best beam in the last h in this segment
             if self.enable_baseline:
-                # update baseline beamset every step to center around max
-                baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
-                self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
+                # # update baseline beamset every step to center around max
+                # baseline_max_beam = self.baseline_beams[np.argmax(self.measure_beams_single_UE(self.current_h_idc,self.baseline_beams))]
+                # self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)   
                 
                 #Alternative: UE measures entire codebook and reports top-k: calculate new max of entire codebook, update beamset if new max not in current beamset
-                # baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
-                # if not baseline_max_beam in self.baseline_beams:
-                #     self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)
+                baseline_max_beam = np.argmax(self.measure_beams_single_UE(self.current_h_idc,np.arange(self.codebook_size)))
+                if not baseline_max_beam in self.baseline_beams:
+                    self.baseline_beams = self.calc_baseline_beams(baseline_max_beam)
             
             # if self.combine_state:
             #     observation = np.concatenate((beam_report,action),axis=0)

@@ -101,8 +101,8 @@ class SubAction_DDPG(object):
         subvalue_loss = criterion(subq_batch, target_subq_batch)
         # subvalue_loss = torch.tensor(0)
         value_loss = criterion(q_batch, target_q_batch)
-        total_loss = 0.5*subvalue_loss + 0.5*value_loss
-        # total_loss = value_loss
+        # total_loss = 0.5*subvalue_loss + 0.5*value_loss
+        total_loss = subvalue_loss
         # print(value_loss.item())
         total_loss.backward()
         self.training_log['critic_mse'].append([value_loss.item(),subvalue_loss.item()])

@@ -65,8 +65,8 @@ def train(num_iterations, agent, env,  evaluate, validate_steps, output, max_epi
             val_env.enable_baseline = True
             val_env.enable_genie = True
             val_env.enable_exhaustive = False
-            if step == num_iterations-1:
-                val_env.enable_exhaustive = True
+            # if step == num_iterations-1:
+            #     val_env.enable_exhaustive = True
             val_env.reset()
             validate_rewards = evaluate(val_env, evalagent, debug=False, visualize=False, save = False)
             toc = time.time()
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     parser.add_argument('--rate', default=0.001, type=float, help='learning rate')
     parser.add_argument('--prate', default=0.0001, type=float, help='policy net learning rate (only for DDPG)')
     parser.add_argument('--warmup', default=128, type=int, help='time without training but only filling the replay memory')
-    parser.add_argument('--discount', default=0.6, type=float, help='')
+    parser.add_argument('--discount', default=0.0, type=float, help='')
     parser.add_argument('--bsize', default=64, type=int, help='minibatch size')
     # parser.add_argument('--rmsize', default=6000000, type=int, help='memory size')
     parser.add_argument('--rmsize', default=60000, type=int, help='memory size')
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
     parser.add_argument('--validate_episodes', default=100, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=100, type=int, help='')
-    parser.add_argument('--validate_steps', default=500, type=int, help='how many steps to perform a validate experiment')
+    parser.add_argument('--validate_steps', default=5000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
     parser.add_argument('--train_iter', default=100001, type=int, help='train iters each timestep')

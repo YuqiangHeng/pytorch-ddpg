@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 
-from model import (Actor, Critic,MLP,SerializedCritic)
+from model import (Actor, Critic,MLP,SerializedCritic, MLPSingle, LSTMPredictor)
 from memory import BeamSpaceSequentialMemory
 from util import *
 
@@ -37,7 +37,7 @@ class BeamPredictor(object):
         self.num_measurements = args.num_measurements
         self.window_length = args.window_length
         
-        self.actor = MLP(self.nb_states, self.window_length, self.num_measurements)
+        self.actor = LSTMPredictor(self.nb_states, self.window_length, self.num_measurements)
         self.actor_optim  = Adam(self.actor.parameters(), lr=args.prate)
         self.memory_limit = args.rmsize
         #Create replay buffer
@@ -101,7 +101,10 @@ class BeamPredictor(object):
         for j in range(self.num_measurements*self.window_length):
             current_state_mask[0,j,np.argsort(current_state[0,j,:])[-self.num_beams_per_report:]] = 1
         
-        next_observation = np.array([np.squeeze(np.array(next_observation))]) #add batch dim
+        if self.num_measurements == 1:
+            next_observation = np.array([[np.squeeze(np.array(next_observation))]]) #add batch dim
+        else:
+            next_observation = np.array([np.squeeze(np.array(next_observation))]) #add batch dim
         next_observation_mask = np.zeros(next_observation.shape)
         for j in range(self.num_measurements):
             next_observation_mask[0,j,np.argsort(next_observation[0,j,:])[-self.num_beams_per_report:]] = 1  
@@ -351,8 +354,8 @@ def train(num_iterations, agent:BeamPredictor, env:BeamManagementEnv,  evaluate:
             val_env.enable_baseline = True
             val_env.enable_genie = True
             val_env.enable_exhaustive = False
-            if step == num_iterations-1:
-                val_env.enable_exhaustive = True            
+            # if step == num_iterations-1:
+            #     val_env.enable_exhaustive = True            
             val_env.reset()
             all_results = evaluate(val_env, evalagent, debug=False, visualize=False, save = False)
             toc = time.time()
@@ -430,9 +433,9 @@ if __name__ == "__main__":
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=2, type=float, help='noise sigma') 
     parser.add_argument('--ou_mu', default=0.0, type=float, help='noise mu') 
-    parser.add_argument('--validate_episodes', default=100, type=int, help='how many episode to perform during validate experiment')
+    parser.add_argument('--validate_episodes', default=20, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=500, type=int, help='')
-    parser.add_argument('--validate_steps', default=2000, type=int, help='how many steps to perform a validate experiment')
+    parser.add_argument('--validate_steps', default=5000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
     parser.add_argument('--init_w', default=0.003, type=float, help='') 
     parser.add_argument('--train_iter', default=100001, type=int, help='train iters each timestep')
@@ -442,13 +445,13 @@ if __name__ == "__main__":
     
     parser.add_argument('--window_length', default=5, type=int, help='')
     parser.add_argument('--combine_state', default= False)
-    parser.add_argument('--num_measurements', default=8,type=int)
+    parser.add_argument('--num_measurements', default=1,type=int)
     # parser.add_argument('--l2norm', default=0.01, type=float, help='l2 weight decay') # TODO
     # parser.add_argument('--cuda', dest='cuda', action='store_true') # TODO
     parser.add_argument('--num_beams_per_UE',default=8,type=int)
     parser.add_argument('--enable_baseline',default=False)
     parser.add_argument('--enable_genie',default=False)
-    parser.add_argument('--ue_speed',default=10)
+    parser.add_argument('--ue_speed',default=5)
     parser.add_argument('--full_observation', default=True)
     parser.add_argument('--conv2d_1_kernel_size',type=int,default=5)
     parser.add_argument('--conv2d_2_kernel_size',type=int,default=3)
@@ -456,7 +459,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_antennas',type=int,default=64)
     parser.add_argument('--use_saved_traj_in_validation',default=False)
     parser.add_argument('--actor_lambda',type=float,default=0.5)
-    parser.add_argument('--num_beams_per_report',type=int,default=16)
+    parser.add_argument('--num_beams_per_report',type=int,default=8)
     
     parser.add_argument('--debug', default = False, dest='debug')
 

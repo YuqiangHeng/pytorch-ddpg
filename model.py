@@ -326,6 +326,7 @@ class MLP(nn.Module):
             # sel = np.argsort(np.sum(x[i],axis=0))[-n:]
             binary_beams[i,sel] = 1
         return binary_beams
+    
 
     def forward(self,x):
         flat = self.flatten(x)
@@ -337,6 +338,85 @@ class MLP(nn.Module):
         out = self.fc6(out)
         out = out.view(-1,*self.outshape)
         return out
+    
+class MLPSingle(nn.Module):
+    def __init__(self, nb_states, window_len, num_measurements):
+        super().__init__()
+        self.flatten = nn.Flatten()
+        self.input_shape = (window_len*num_measurements, nb_states)
+        nsize = self._serial_input_size(self.input_shape)
+        hidden1 = int(nsize/2)
+        hidden2 = int(nsize/4)
+        hidden3 = int(nsize/8)
+        self.outdim = num_measurements*nb_states
+        self.outshape = (num_measurements,nb_states)
+        self.fc1 = nn.Sequential(nn.Linear(nsize,hidden1),
+                                    nn.ReLU())
+        self.fc2 = nn.Sequential(nn.Linear(hidden1,hidden2),
+                                    nn.ReLU())
+        self.fc3 = nn.Sequential(nn.Linear(hidden2,hidden2),
+                                    nn.ReLU())
+        # self.fc4 = nn.Sequential(nn.Linear(hidden2,hidden2),
+        #                             nn.ReLU())
+        self.fc5 = nn.Sequential(nn.Linear(hidden2,self.outdim),
+                                    nn.ReLU())
+        self.fc6 = nn.Linear(self.outdim,self.outdim)
+
+    def _serial_input_size(self, shape):
+        batch_size = 1
+        dummy_input = torch.autograd.Variable(torch.rand(batch_size, *shape))
+        dummy_flat = self.flatten(dummy_input)
+        nsize = dummy_flat.data.view(batch_size,-1).size(1)
+        return nsize
+    
+    def select_beams(self, x, nb_actions, n):
+        bsize = x.shape[0]
+        binary_beams = np.zeros((bsize, nb_actions))
+        for i in range(bsize):
+            sel = np.argsort(np.sum(x[i],axis=0))[-n:]
+            binary_beams[i,sel] = 1
+        return binary_beams    
+
+    def forward(self,x):
+        flat = self.flatten(x)
+        out = self.fc1(flat)
+        out = self.fc2(out)
+        out = self.fc3(out)
+        # out = self.fc4(out)
+        out = self.fc5(out)
+        out = self.fc6(out)
+        out = out.view(-1,*self.outshape)
+        return out
+    
+class LSTMPredictor(nn.Module):
+    def __init__(self, nb_states, window_len, num_measurements):
+        super().__init__()
+        self.nb_states = nb_states
+        self.window_len = window_len
+        self.outshape = nb_states
+        self.num_measurements = num_measurements
+        self.input_shape = (self.window_len * self.num_measurements, nb_states)
+        self.lstm = nn.LSTM(input_size = self.nb_states, hidden_size = self.nb_states, num_layers = 2, batch_first=True, dropout = 0.2)
+        # self.fc_hidden_dim = int(self.nb_states/2)
+        self.fc_hidden_dim = self.nb_states
+        self.fc1 = nn.Sequential(nn.Linear(self.nb_states,self.fc_hidden_dim), nn.ReLU())
+        self.fc2 = nn.Sequential(nn.Linear(self.fc_hidden_dim,self.outshape), nn.ReLU())
+                
+    def forward(self, x):
+        self.lstm.flatten_parameters()
+        lstm_out, hidden = self.lstm(x)
+        out = self.fc1(lstm_out[:,-1,:])
+        out = self.fc2(out)
+        out = out.view(-1,self.num_measurements,self.nb_states)
+        return out
+    
+    def select_beams(self, x, nb_actions, n):
+        bsize = x.shape[0]
+        binary_beams = np.zeros((bsize, nb_actions))
+        for i in range(bsize):
+            sel = np.argsort(np.sum(x[i],axis=0))[-n:]
+            binary_beams[i,sel] = 1
+        return binary_beams    
 
 class MLPDist(nn.Module):
     def __init__(self, nb_states, window_len, num_measurements):
